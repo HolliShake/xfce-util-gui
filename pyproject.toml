@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xfce-util"
-version = "0.1.2"
+version = "0.1.5"
 description = "A desktop utility for browsing and applying installed themes"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -40,3 +40,6 @@ py-modules = [
     "validator",
     "window_theme_tab",
 ]
+
+[tool.setuptools.data-files]
+"share/icons/hicolor/scalable/apps" = ["xfce-util.svg"]

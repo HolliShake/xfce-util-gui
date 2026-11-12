@@ -27,6 +27,12 @@ if [ ! -x /opt/xfceutil/venv/bin/python ]; then
 fi
 sudo /opt/xfceutil/venv/bin/python -m pip install \
     --only-binary=:all: --upgrade "$wheel"
+sudo install -Dm644 "$project_dir/xfce-util.svg" \
+    /usr/local/share/icons/hicolor/scalable/apps/xfce-util.svg
+sudo install -d -m 755 /usr/local/share/pixmaps
+sudo /opt/xfceutil/venv/bin/python -c \
+    'import sys, cairosvg; cairosvg.svg2png(url=sys.argv[1], write_to=sys.argv[2], output_width=128, output_height=128)' \
+    "$project_dir/xfce-util.svg" /usr/local/share/pixmaps/xfce-util.png
 sudo install -Dm755 "$project_dir/xfce-util-launcher" /usr/local/bin/xfce-util
 sudo install -Dm644 "$project_dir/xfce-util.desktop" \
     /usr/local/share/applications/xfce-util.desktop

@@ -30,7 +30,7 @@ The **KDE Theme** tab is currently a placeholder; KDE theme management is not im
 
 ## Build and system-wide installation
 
-The installer builds a wheel in a project-local virtual environment, installs it in a dedicated root-owned environment under `/opt/xfceutil`, and registers a system launcher. The app itself runs as your desktop user; Polkit authentication is requested only for all-user changes.
+The installer builds a wheel in a project-local virtual environment, installs it in a dedicated root-owned environment under `/opt/xfceutil`, and registers a system launcher and XFCE Utility icon. The app itself runs as your desktop user; Polkit authentication is requested only for all-user changes.
 
 On Ubuntu, Install the runtime packages and Python build tools:
 
