@@ -36,7 +36,7 @@ On Ubuntu, install the runtime and build tools:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin policykit-1 xfce-polkit
+sudo apt install python3 python3-venv python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin polkitd pkexec xfce-polkit
 ```
 
 Build the wheel from the project directory:

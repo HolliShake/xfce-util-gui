@@ -970,7 +970,8 @@ def _apply_all_users_with_authentication(
     pkexec = shutil.which("pkexec")
     if pkexec is None:
         raise RuntimeError(
-            "Polkit is unavailable. Install policykit-1 and an XFCE Polkit authentication agent."
+            "Polkit is unavailable. Install pkexec (provided by polkitd) and an "
+            "XFCE Polkit authentication agent."
         )
 
     interpreter = _require_trusted_root_path(Path(sys.executable), "Python interpreter")
