@@ -30,13 +30,13 @@ The **KDE Theme** tab is currently a placeholder; KDE theme management is not im
 
 ## Build and system-wide installation
 
-The steps below build a wheel and install it with `pipx` in its isolated global environment. The `xfce-util` command is placed in `/usr/local/bin`, and the desktop entry adds XFCE Utility to the applications menu.
+The steps below build a wheel and install it in a dedicated virtual environment under `/opt/xfceutil`. A small system launcher in `/usr/local/bin` starts the app as your desktop user. The app requests Polkit authentication only for all-user changes; **pipx is not required**.
 
 On Ubuntu, install the runtime and build tools:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv pipx python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin policykit-1 xfce-polkit
+sudo apt install python3 python3-venv python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin policykit-1 xfce-polkit
 ```
 
 Build the wheel from the project directory:
@@ -49,20 +49,23 @@ python -m build
 deactivate
 ```
 
-Install the wheel and desktop launcher for all users:
+Install the wheel into a root-owned virtual environment and add the system launcher:
 
 ```bash
-sudo pipx install --global dist/xfce_util-0.1.0-py3-none-any.whl
+sudo install -d -m 755 /opt/xfceutil
+sudo python3 -m venv /opt/xfceutil/venv
+sudo /opt/xfceutil/venv/bin/python -m pip install --only-binary=:all: --upgrade dist/xfce_util-0.1.2-py3-none-any.whl
+sudo install -Dm755 xfce-util-launcher /usr/local/bin/xfce-util
 sudo install -Dm644 xfce-util.desktop /usr/local/share/applications/xfce-util.desktop
 ```
 
 Log out and back in, or refresh the desktop's application menu if the launcher does not appear immediately. You can also start the application from a terminal with `xfce-util`.
 
-To uninstall:
+When updating an existing installation, rebuild the wheel and rerun the `pip install` command above with the new wheel. To uninstall:
 
 ```bash
-sudo pipx uninstall --global xfce-util
-sudo rm /usr/local/share/applications/xfce-util.desktop
+sudo rm /usr/local/bin/xfce-util /usr/local/share/applications/xfce-util.desktop
+sudo rm -r /opt/xfceutil/venv
 ```
 
 For development without a global install, activate a virtual environment, install dependencies with `python -m pip install -r requirements.txt`, and run `python main.py`.
@@ -74,7 +77,7 @@ For development without a global install, activate a virtual environment, instal
 3. Select **Apply** to update the current desktop settings.
 4. To update configuration for other accounts, enable the all-user option before applying. XFCE Utility stays in your desktop session and requests authentication through the native Polkit dialog only for this operation.
 
-All-user changes target home directories under `/home`. Settings changed through a live desktop session affect the current session; other users' running sessions are not changed live. GTK themes selected for all-user use must be installed in `/usr/share/themes` or `/usr/local/share/themes`. All-user operations require the system-wide pipx installation described above; do not launch the whole GUI as root.
+All-user changes target home directories under `/home`. Settings changed through a live desktop session affect the current session; other users' running sessions are not changed live. GTK themes selected for all-user use must be installed in `/usr/share/themes` or `/usr/local/share/themes`. All-user operations require the root-owned system installation described above; do not launch the whole GUI as root.
 
 ## Development
 

@@ -526,7 +526,7 @@ class GtkThemeTab:
                 select_gtk_theme(theme, applyToAllUser=all_users)
         except (RuntimeError, ValueError, OSError) as error:
             extra = "\n".join(str(item.message) for item in caught)
-            self._set_status(f"Could not apply {theme.name}.", "error")
+            self._set_status(f"Could not apply {theme.name}: {error}", "error")
             messagebox.showerror(
                 "Could not apply theme", f"{error}\n{extra}".strip(), parent=self._parent
             )

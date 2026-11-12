@@ -835,7 +835,8 @@ def _require_trusted_root_path(path: Path, description: str) -> Path:
     info = resolved.stat()
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
         raise RuntimeError(
-            f"All-user changes require a root-owned system installation ({description})."
+            "All-user changes require a root-owned system installation; reinstall with "
+            f"the system-wide installation instructions ({description})."
         )
     for directory in resolved.parents:
         directory_info = directory.stat()
@@ -845,7 +846,8 @@ def _require_trusted_root_path(path: Path, description: str) -> Path:
             or directory_info.st_mode & 0o022
         ):
             raise RuntimeError(
-                f"All-user changes require a root-owned system installation ({description})."
+                "All-user changes require a root-owned system installation; reinstall with "
+                f"the system-wide installation instructions ({description})."
             )
     return resolved
 

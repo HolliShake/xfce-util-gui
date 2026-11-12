@@ -388,7 +388,7 @@ class WindowThemeTab:
         try:
             select_window_theme(theme, applyToAllUser=all_users)
         except (RuntimeError, ValueError, OSError) as error:
-            self._set_status(f"Could not apply {theme.name}.", "error")
+            self._set_status(f"Could not apply {theme.name}: {error}", "error")
             messagebox.showerror("Could not apply window theme", str(error), parent=self._parent)
             self._update_apply_state()
             return

@@ -1,6 +1,6 @@
 import customtkinter as ctk
 
-from cursor_tab import create_cursor_tab
+from cursor_theme_tab import create_cursor_tab
 from gtk_theme_tab import GtkThemeTab
 from icon_theme_tab import create_icon_theme_tab
 from kde_theme_tab import create_kde_theme_tab
