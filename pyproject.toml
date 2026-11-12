@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xfce-util"
+version = "0.1.0"
+description = "A desktop utility for browsing and applying installed themes"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+classifiers = [
+    "Environment :: X11 Applications",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Desktop Environment",
+]
+dependencies = [
+    "customtkinter",
+    "Pillow",
+    "CairoSVG>=2.9.0",
+    "cairocffi",
+    "defusedxml",
+]
+
+[project.scripts]
+xfce-util = "main:main"
+
+[tool.setuptools]
+py-modules = [
+    "cursor_tab",
+    "gtk_theme_tab",
+    "icon_theme_tab",
+    "kde_theme_tab",
+    "main",
+    "supported_display_manager",
+    "theme",
+    "validator",
+    "window_theme_tab",
+]

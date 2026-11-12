@@ -23,5 +23,9 @@ class XfceUtilApp(ctk.CTk):
         self.cursor_theme_tab = create_cursor_tab(tabs.add("Cursor"))
 
 
-if __name__ == "__main__":
+def main() -> None:
     XfceUtilApp().mainloop()
+
+
+if __name__ == "__main__":
+    main()

@@ -6,4 +6,4 @@ cairocffi
 defusedxml
 
 # Ubuntu system dependencies:
-# sudo apt install python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin
+# sudo apt install python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin policykit-1 xfce-polkit

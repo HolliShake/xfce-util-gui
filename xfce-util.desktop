@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=XFCE Utility
+Comment=Browse and apply desktop themes; authenticate only for all-user changes
+Exec=xfce-util
+Icon=preferences-desktop-theme
+Terminal=false
+Categories=Settings;DesktopSettings;
+StartupNotify=true

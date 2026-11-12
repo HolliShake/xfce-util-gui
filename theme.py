@@ -5,6 +5,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import uuid
 import warnings
 from contextlib import ExitStack
@@ -481,18 +482,10 @@ def select_icon_theme(theme: IconData, applyToAllUser: bool = False) -> None:
     if not isinstance(theme, IconData):
         raise TypeError("theme must be an instance of IconData")
     _validate_name(theme.name, "icon")
+    if applyToAllUser:
+        _apply_all_users_with_authentication("icon", theme)
     _set_related_theme("icon", theme.name, "xsettings", "/Net/IconThemeName",
                        _GNOME_IFACE, "icon-theme")
-    if applyToAllUser:
-        try:
-            _apply_xsettings_theme_to_homes(
-                theme.name, Path("/home"), "icon", "gtk-icon-theme-name", "Net", "IconThemeName"
-            )
-        except (OSError, RuntimeError, ValueError) as e:
-            raise RuntimeError(
-                f"Failed to apply icon theme to all users; current session settings may already "
-                f"have changed: {e}"
-            ) from e
 
 
 # --------------------------------------------------------------------------- #
@@ -583,18 +576,10 @@ def select_cursor_theme(theme: CursorData, applyToAllUser: bool = False) -> None
     if not isinstance(theme, CursorData):
         raise TypeError("theme must be an instance of CursorData")
     _validate_name(theme.name, "cursor")
+    if applyToAllUser:
+        _apply_all_users_with_authentication("cursor", theme)
     _set_related_theme("cursor", theme.name, "xsettings", "/Gtk/CursorThemeName",
                        _GNOME_IFACE, "cursor-theme")
-    if applyToAllUser:
-        try:
-            _apply_xsettings_theme_to_homes(
-                theme.name, Path("/home"), "cursor", "gtk-cursor-theme-name", "Gtk", "CursorThemeName"
-            )
-        except (OSError, RuntimeError, ValueError) as error:
-            raise RuntimeError(
-                f"Failed to apply cursor theme to all users; current session settings may already "
-                f"have changed: {error}"
-            ) from error
 
 
 # --------------------------------------------------------------------------- #
@@ -845,6 +830,172 @@ def _apply_theme_to_homes(theme: ThemeData, homes_root: Path) -> None:
     )
 
 
+def _require_trusted_root_path(path: Path, description: str) -> Path:
+    resolved = path.resolve(strict=True)
+    info = resolved.stat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise RuntimeError(
+            f"All-user changes require a root-owned system installation ({description})."
+        )
+    for directory in resolved.parents:
+        directory_info = directory.stat()
+        if (
+            not stat.S_ISDIR(directory_info.st_mode)
+            or directory_info.st_uid != 0
+            or directory_info.st_mode & 0o022
+        ):
+            raise RuntimeError(
+                f"All-user changes require a root-owned system installation ({description})."
+            )
+    return resolved
+
+
+def _require_trusted_theme_tree(path: Path) -> None:
+    pending = [path]
+    while pending:
+        current = pending.pop()
+        info = current.lstat()
+        if (
+            stat.S_ISLNK(info.st_mode)
+            or info.st_uid != 0
+            or info.st_mode & 0o022
+            or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode))
+        ):
+            raise RuntimeError(
+                f"Refusing privileged GTK theme access to untrusted asset: {current}"
+            )
+        if stat.S_ISDIR(info.st_mode):
+            pending.extend(current.iterdir())
+
+
+def _system_gtk_theme_for_all_users(name: str, absolute_path: str) -> ThemeData:
+    _validate_name(name, "GTK")
+    selected = Path(absolute_path)
+    if selected.name != name:
+        raise ValueError("GTK theme name and path do not match")
+
+    source = None
+    for root in (Path("/usr/local/share/themes"), Path("/usr/share/themes")):
+        try:
+            trusted_root = root.resolve(strict=True)
+        except FileNotFoundError:
+            continue
+        root_info = trusted_root.stat()
+        if (
+            not stat.S_ISDIR(root_info.st_mode)
+            or root_info.st_uid != 0
+            or root_info.st_mode & 0o022
+        ):
+            continue
+        try:
+            if selected.parent.resolve(strict=True) == trusted_root:
+                candidate = trusted_root / name
+                candidate_info = candidate.lstat()
+                if (
+                    not stat.S_ISDIR(candidate_info.st_mode)
+                    or candidate_info.st_uid != 0
+                    or candidate_info.st_mode & 0o022
+                ):
+                    raise RuntimeError(f"GTK theme directory is not trusted: {candidate}")
+                source = candidate
+                break
+        except FileNotFoundError:
+            continue
+    if source is None:
+        raise ValueError(
+            "All-user GTK changes require a theme installed under "
+            "/usr/share/themes or /usr/local/share/themes."
+        )
+
+    components: dict[str, Path] = {}
+    for version in ("gtk-2.0", "gtk-3.0", "gtk-4.0"):
+        component = source / version
+        try:
+            component.lstat()
+        except FileNotFoundError:
+            continue
+        _require_trusted_theme_tree(component)
+        components[version] = component
+
+    return ThemeData(
+        name=name,
+        absolute_path=str(source),
+        gtk2=(components.get("gtk-2.0", source / "gtk-2.0") / "gtkrc").is_file(),
+        gtk3=(components.get("gtk-3.0", source / "gtk-3.0") / "gtk.css").is_file(),
+        gtk4=(components.get("gtk-4.0", source / "gtk-4.0") / "gtk.css").is_file(),
+        xfwm4=False,
+        icon=None,
+        cursor=None,
+    )
+
+
+def _apply_all_users_as_root(arguments: list[str]) -> int:
+    if os.geteuid() != 0:
+        print("The all-user helper must be run through Polkit.", file=sys.stderr)
+        return 1
+    if len(arguments) not in (2, 3):
+        print("Invalid all-user helper arguments.", file=sys.stderr)
+        return 2
+
+    kind, name = arguments[:2]
+    try:
+        _validate_name(name, kind)
+        if kind == "gtk" and len(arguments) == 3:
+            theme = _system_gtk_theme_for_all_users(name, arguments[2])
+            _apply_theme_to_homes(theme, Path("/home"))
+        elif kind == "window" and len(arguments) == 2:
+            _apply_window_theme_to_homes(WindowData(name, ""), Path("/home"))
+        elif kind == "icon" and len(arguments) == 2:
+            _apply_xsettings_theme_to_homes(
+                name, Path("/home"), "icon", "gtk-icon-theme-name", "Net", "IconThemeName"
+            )
+        elif kind == "cursor" and len(arguments) == 2:
+            _apply_xsettings_theme_to_homes(
+                name, Path("/home"), "cursor", "gtk-cursor-theme-name", "Gtk", "CursorThemeName"
+            )
+        else:
+            print("Invalid all-user helper operation.", file=sys.stderr)
+            return 2
+    except (OSError, RuntimeError, ValueError, UnicodeError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    return 0
+
+
+def _apply_all_users_with_authentication(
+    kind: str, theme: ThemeData | WindowData | IconData | CursorData
+) -> None:
+    pkexec = shutil.which("pkexec")
+    if pkexec is None:
+        raise RuntimeError(
+            "Polkit is unavailable. Install policykit-1 and an XFCE Polkit authentication agent."
+        )
+
+    interpreter = _require_trusted_root_path(Path(sys.executable), "Python interpreter")
+    application = _require_trusted_root_path(Path(__file__), "application files")
+    pkexec_path = _require_trusted_root_path(Path(pkexec), "Polkit executable")
+    arguments = [
+        str(pkexec_path),
+        str(interpreter),
+        "-I",
+        str(application),
+        "--apply-all-users",
+        kind,
+        theme.name,
+    ]
+    if kind == "gtk":
+        if not isinstance(theme, ThemeData):
+            raise TypeError("GTK all-user operation requires ThemeData")
+        arguments.append(theme.absolute_path)
+
+    result = subprocess.run(arguments, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        if not detail:
+            detail = "Authentication was cancelled or the privileged operation failed."
+        raise RuntimeError(f"Could not apply theme for all users: {detail}")
+
+
 # --------------------------------------------------------------------------- #
 # Public selectors for GTK / window themes
 # --------------------------------------------------------------------------- #
@@ -866,6 +1017,8 @@ def select_gtk_theme(theme: ThemeData, applyToAllUser: bool = False) -> None:
     if not isinstance(theme, ThemeData):
         raise TypeError("theme must be an instance of ThemeData")
     _validate_name(theme.name, "GTK")
+    if applyToAllUser:
+        _apply_all_users_with_authentication("gtk", theme)
 
     _set_related_theme("GTK", theme.name, "xsettings", "/Net/ThemeName",
                        _GNOME_IFACE, "gtk-theme")
@@ -900,14 +1053,6 @@ def select_gtk_theme(theme: ThemeData, applyToAllUser: bool = False) -> None:
             continue
         _set_related_theme(kind, name, "xsettings", property_name, _GNOME_IFACE, key)
 
-    if applyToAllUser:
-        try:
-            _apply_theme_to_homes(theme, Path("/home"))
-        except (OSError, ValueError, RuntimeError) as e:
-            raise RuntimeError(
-                f"Failed to apply all-user GTK overrides; current session settings may already have changed: {e}"
-            ) from e
-
 
 def select_window_theme(theme: WindowData, applyToAllUser: bool = False) -> None:
     """Set an installed XFWM4 theme in XFCE and GNOME (gsettings) settings.
@@ -918,16 +1063,10 @@ def select_window_theme(theme: WindowData, applyToAllUser: bool = False) -> None
     if not isinstance(theme, WindowData):
         raise TypeError("theme must be an instance of WindowData")
     _validate_name(theme.name, "window")
+    if applyToAllUser:
+        _apply_all_users_with_authentication("window", theme)
 
     _set_related_theme("window", theme.name, "xfwm4", "/general/theme", _GNOME_WM, "theme")
-    if applyToAllUser:
-        try:
-            _apply_window_theme_to_homes(theme, Path("/home"))
-        except (OSError, RuntimeError, ValueError) as e:
-            raise RuntimeError(
-                f"Failed to apply window theme to all users; current session settings may already "
-                f"have changed: {e}"
-            ) from e
 
 
 __all__ = [
@@ -951,6 +1090,8 @@ __all__ = [
 ]
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--apply-all-users"]:
+        raise SystemExit(_apply_all_users_as_root(sys.argv[2:]))
     print(f"GTK Theme: {get_gtk_theme_name()}")
     print(f"Window Theme: {get_window_theme_name()}")
     print(f"Icon Theme: {get_icon_theme_name()}")
