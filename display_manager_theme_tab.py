@@ -7,6 +7,7 @@ import customtkinter as ctk
 
 from theme import (
     get_available_cursor_themes,
+    get_available_fonts,
     get_available_icon_themes,
     get_available_themes,
 )
@@ -52,6 +53,7 @@ _RADIUS_INPUT = 8
 
 _LOGGER = logging.getLogger(__name__)
 _THEME_SETTING_KINDS = {
+    "font-name": "font",
     "theme-name": "gtk",
     "icon-theme-name": "icon",
     "cursor-theme-name": "cursor",
@@ -74,7 +76,8 @@ class DisplayManagerThemeTab:
         self._f_mono_bold = ctk.CTkFont(family="monospace", size=12, weight="bold")
         self._f_meta = ctk.CTkFont(family="monospace", size=10)
         self._f_icon = ctk.CTkFont(size=14, weight="bold")
-        self._installed_theme_names: dict[str, tuple[str, ...] | None] = {}
+        self._installed_choices: dict[str, tuple[str, ...] | None] = {}
+        self._font_preview: ctk.CTkLabel | None = None
 
         try:
             self._detected: DisplayManagerEnum | None = get_display_manager()
@@ -256,6 +259,7 @@ class DisplayManagerThemeTab:
         ] = {}
         self._setting_initial: dict[str, str | None] = {}
         self._setting_initial_switches: dict[str, bool] = {}
+        self._font_preview = None
         card = ctk.CTkFrame(
             parent,
             fg_color=_SURFACE,
@@ -630,7 +634,7 @@ class DisplayManagerThemeTab:
                 value_entry.deselect()
             self._setting_initial_switches[setting.name] = initial_enabled
         elif theme_kind is not None:
-            choices = self._get_installed_theme_names(theme_kind)
+            choices = self._get_installed_choices(theme_kind)
             if choices is not None and parsed_value is not None:
                 choices = tuple(dict.fromkeys((parsed_value.value, *choices)))
             combo_values = list(choices or ())
@@ -693,7 +697,11 @@ class DisplayManagerThemeTab:
                 state="disabled" if config_error else "normal",
                 command=lambda entry=value_entry: self._choose_background_file(entry),
             ).grid(row=4, column=0, sticky="e", padx=(22, 0), pady=(0, 8))
-        elif theme_kind is not None and self._installed_theme_names.get(theme_kind) is None:
+        elif (
+            theme_kind is not None
+            and setting.name != "font-name"
+            and self._installed_choices.get(theme_kind) is None
+        ):
             # Show a small helper note under the input
             ctk.CTkLabel(
                 row_frame,
@@ -706,6 +714,22 @@ class DisplayManagerThemeTab:
             ).grid(row=4, column=0, sticky="ew", padx=(22, 0), pady=(0, 8))
         elif setting.name != "user-background":
             value_entry.grid_configure(pady=(0, 8))
+
+        if setting.name == "font-name":
+            preview_text = "The quick brown fox jumps over the lazy dog."
+            if self._installed_choices.get("font") is None:
+                preview_text += "\nInstalled font list unavailable; enter a font manually."
+            self._font_preview = ctk.CTkLabel(
+                row_frame,
+                text=preview_text,
+                font=self._f_body,
+                text_color=_TEXT_SECONDARY,
+                anchor="w",
+            )
+            self._font_preview.grid(
+                row=4, column=0, sticky="ew", padx=(22, 0), pady=(0, 8)
+            )
+            self._update_font_preview(value_entry.get())
 
         self._setting_entries[setting.name] = value_entry
         self._setting_initial[setting.name] = (
@@ -722,13 +746,76 @@ class DisplayManagerThemeTab:
     def _attach_change_tracking(self, name: str, widget) -> None:
         try:
             if isinstance(widget, ctk.CTkComboBox):
-                widget.configure(command=lambda _value: self._sync_save_state())
+                widget.configure(
+                    command=lambda value: self._on_dropdown_change(name, value)
+                )
+                if widget.cget("state") == "normal":
+                    widget.bind(
+                        "<KeyRelease>",
+                        lambda _event: self._on_dropdown_change(name, widget.get()),
+                        add="+",
+                    )
             elif isinstance(widget, ctk.CTkSwitch):
                 widget.configure(command=self._sync_save_state)
             else:
-                widget.bind("<KeyRelease>", lambda _e: self._sync_save_state(), add="+")
+                widget.bind(
+                    "<KeyRelease>",
+                    lambda _event: self._on_text_change(name, widget),
+                    add="+",
+                )
         except Exception:
             _LOGGER.debug("Could not attach change tracking for %s", name, exc_info=True)
+
+    def _on_dropdown_change(self, name: str, value: str) -> None:
+        if name == "font-name":
+            initial_value = self._setting_initial.get(name) or ""
+            if value in (self._get_installed_choices("font") or ()):
+                suffix = self._font_description_suffix(initial_value)
+                if suffix:
+                    value = f"{value} {suffix}"
+                    entry = self._setting_entries.get(name)
+                    if isinstance(entry, ctk.CTkComboBox):
+                        entry.set(value)
+            self._update_font_preview(value)
+        self._sync_save_state()
+
+    def _on_text_change(self, name: str, widget: ctk.CTkEntry) -> None:
+        if name == "font-name":
+            self._update_font_preview(widget.get())
+        self._sync_save_state()
+
+    def _update_font_preview(self, font_description: str) -> None:
+        if self._font_preview is None:
+            return
+        family = font_description.strip()
+        available_families = self._get_installed_choices("font")
+        if available_families:
+            matching_families = [
+                candidate
+                for candidate in available_families
+                if family.casefold() == candidate.casefold()
+                or family.casefold().startswith(candidate.casefold() + " ")
+            ]
+            if matching_families:
+                family = max(matching_families, key=len)
+        if not family:
+            family = "Sans"
+        self._font_preview.configure(
+            font=ctk.CTkFont(family=family, size=15)
+        )
+
+    def _font_description_suffix(self, font_description: str) -> str:
+        available_families = self._get_installed_choices("font") or ()
+        matching_families = [
+            candidate
+            for candidate in available_families
+            if font_description.casefold() == candidate.casefold()
+            or font_description.casefold().startswith(candidate.casefold() + " ")
+        ]
+        if not matching_families:
+            return ""
+        family = max(matching_families, key=len)
+        return font_description[len(family) :].strip()
 
     def _current_updates(self) -> dict[str, str]:
         updates: dict[str, str] = {}
@@ -796,11 +883,13 @@ class DisplayManagerThemeTab:
                 self._save_hint.configure(text="No unsaved changes", text_color=_MUTED)
 
     # ── Theme choices ─────────────────────────────────────────────────────
-    def _get_installed_theme_names(self, kind: str) -> tuple[str, ...] | None:
-        if kind in self._installed_theme_names:
-            return self._installed_theme_names[kind]
+    def _get_installed_choices(self, kind: str) -> tuple[str, ...] | None:
+        if kind in self._installed_choices:
+            return self._installed_choices[kind]
         try:
-            if kind == "gtk":
+            if kind == "font":
+                names = get_available_fonts()
+            elif kind == "gtk":
                 names = (
                     theme.name
                     for theme in get_available_themes()
@@ -815,13 +904,13 @@ class DisplayManagerThemeTab:
             result = tuple(sorted(set(names), key=str.casefold))
         except RuntimeError:
             _LOGGER.warning(
-                "Could not load installed %s themes for the display-manager editor",
+                "Could not load installed %s choices for the display-manager editor",
                 kind,
                 exc_info=True,
             )
-            self._installed_theme_names[kind] = None
+            self._installed_choices[kind] = None
             return None
-        self._installed_theme_names[kind] = result
+        self._installed_choices[kind] = result
         return result
 
     # ── Save ──────────────────────────────────────────────────────────────

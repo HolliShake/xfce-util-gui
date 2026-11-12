@@ -50,7 +50,7 @@ From the project directory, run the installer as your normal desktop user:
 ./install.sh
 ```
 
-The installer prompts for sudo when it creates or updates the system environment. It leaves the build wheel and local build environment in `dist/` and `.build-venv/`. The general pattern—an isolated Python environment plus a launcher and desktop entry—is also used by the [`desktop-app` project](https://github.com/chrisjbillington/desktop-app).
+The installer prompts for sudo when it creates or updates the system environment and force-reinstalls the local wheel, including when rebuilding the same version. It leaves the build wheel and local build environment in `dist/` and `.build-venv/`. The general pattern—an isolated Python environment plus a launcher and desktop entry—is also used by the [`desktop-app` project](https://github.com/chrisjbillington/desktop-app).
 
 Run `./install.sh` again to update. To uninstall:
 

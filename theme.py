@@ -316,6 +316,26 @@ def _set_related_theme(kind: str, name: str, channel: str, property_name: str,
         warnings.warn(f"Partially set {kind} theme '{name}' ({message})", stacklevel=3)
 
 
+def get_available_fonts() -> list[str]:
+    """Return unique font families known to Fontconfig."""
+    fc_list = shutil.which("fc-list")
+    if fc_list is None:
+        raise RuntimeError("Fontconfig's fc-list command is not available.")
+    try:
+        result = _run([fc_list, "--format", "%{family}\n"])
+    except (OSError, subprocess.CalledProcessError, UnicodeError) as error:
+        raise RuntimeError(f"Failed to get available fonts: {_describe(error)}") from error
+
+    fonts = {
+        family.strip()
+        for line in result.stdout.splitlines()
+        for family in line.split(",")
+        if family.strip()
+    }
+    fonts.update(("Monospace", "Sans", "Serif"))
+    return sorted(fonts, key=str.casefold)
+
+
 # --------------------------------------------------------------------------- #
 # GTK / XFWM4 theme discovery
 # --------------------------------------------------------------------------- #
@@ -1345,6 +1365,7 @@ __all__ = [
     "get_icon_theme_name",
     "get_cursor_theme_name",
     "get_kde_theme_name",
+    "get_available_fonts",
     "get_available_themes",
     "get_available_window_themes",
     "get_available_icon_themes",

@@ -26,7 +26,7 @@ if [ ! -x /opt/xfceutil/venv/bin/python ]; then
     sudo python3 -m venv /opt/xfceutil/venv
 fi
 sudo /opt/xfceutil/venv/bin/python -m pip install \
-    --only-binary=:all: --upgrade "$wheel"
+    --only-binary=:all: --upgrade --force-reinstall "$wheel"
 sudo install -Dm644 "$project_dir/xfce-util.svg" \
     /usr/local/share/icons/hicolor/scalable/apps/xfce-util.svg
 sudo install -d -m 755 /usr/local/share/pixmaps
