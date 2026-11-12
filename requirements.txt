@@ -1,0 +1,9 @@
+# Python runtime dependencies
+customtkinter
+Pillow
+CairoSVG>=2.9.0
+cairocffi
+defusedxml
+
+# Ubuntu system dependencies:
+# sudo apt install python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin
