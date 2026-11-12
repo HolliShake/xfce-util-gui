@@ -1,8 +1,11 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import supported_display_manager as display_manager
 from supported_display_manager import (
     DisplayManagerEnum,
     DisplayManagerConfigError,
@@ -12,6 +15,7 @@ from supported_display_manager import (
     parse_gdm_config,
     parse_lightdm_greeter_config,
     parse_sddm_config,
+    save_display_manager_settings,
 )
 
 
@@ -230,6 +234,105 @@ class SupportedDisplayManagerTests(unittest.TestCase):
             values["GraphicalThemeDir"].value, "/usr/share/gdm/themes"
         )
         self.assertNotIn("WaylandEnable", values)
+
+    def test_ini_writer_preserves_unrelated_content_and_backs_up_original(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "greeter.conf"
+            original = (
+                "# Keep this comment\n"
+                "[greeter]\n"
+                "; Keep this too\n"
+                "theme-name=OldTheme\n"
+                "font-name=Inter\n"
+                "\n[other]\n"
+                "theme-name=NotGreeter\n"
+            )
+            path.write_text(original, encoding="utf-8")
+
+            display_manager._write_ini_settings(
+                path, "greeter", {"theme-name": "NewTheme", "background": "/tmp/bg"}
+            )
+
+            contents = path.read_text(encoding="utf-8")
+            backups = list(Path(temporary).glob("greeter.conf.backup-*"))
+            backup_contents = backups[0].read_text(encoding="utf-8")
+
+        self.assertIn("# Keep this comment\n[greeter]\n; Keep this too\n", contents)
+        self.assertIn("theme-name=NewTheme\n", contents)
+        self.assertIn("font-name=Inter\n", contents)
+        self.assertIn("background=/tmp/bg\n", contents)
+        self.assertIn("[other]\ntheme-name=NotGreeter\n", contents)
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backup_contents, original)
+
+    def test_ini_writer_creates_missing_section(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "sddm.conf"
+            path.write_text("[General]\nHaltCommand=/usr/bin/poweroff\n", encoding="utf-8")
+
+            display_manager._write_ini_settings(
+                path, "Theme", {"Current": "Breeze"}
+            )
+
+            contents = path.read_text(encoding="utf-8")
+
+        self.assertIn("[General]\nHaltCommand=/usr/bin/poweroff\n", contents)
+        self.assertIn("\n[Theme]\nCurrent=Breeze\n", contents)
+
+    def test_save_rejects_unlisted_keys_and_multiline_values(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported setting"):
+            display_manager._validate_display_manager_updates(
+                DisplayManagerEnum.SDDM, {"Exec": "command"}
+            )
+        with self.assertRaisesRegex(ValueError, "Invalid value"):
+            display_manager._validate_display_manager_updates(
+                DisplayManagerEnum.SDDM, {"Current": "Breeze\n[Other]"}
+            )
+
+    def test_save_requests_pkexec_for_supported_changes(self):
+        with (
+            patch.object(display_manager.shutil, "which", return_value="/usr/bin/pkexec"),
+            patch.object(
+                display_manager,
+                "_require_trusted_root_path",
+                side_effect=lambda path, _description: Path(path).resolve(),
+            ),
+            patch.object(
+                display_manager.subprocess,
+                "run",
+                return_value=SimpleNamespace(returncode=0, stdout="", stderr=""),
+            ) as run,
+        ):
+            save_display_manager_settings(
+                DisplayManagerEnum.SDDM, {"Current": "Breeze"}
+            )
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "/usr/bin/pkexec")
+        self.assertEqual(command[-3], "--save-display-manager-settings")
+        self.assertEqual(command[-2], "sddm")
+        self.assertEqual(json.loads(command[-1]), {"Current": "Breeze"})
+
+    def test_root_helper_rejects_non_root_and_dispatches_whitelisted_settings(self):
+        updates = {"theme-name": "Vimix"}
+        with patch.object(display_manager.os, "geteuid", return_value=1000):
+            self.assertEqual(
+                display_manager._save_display_manager_settings_as_root(
+                    ["lightdm", json.dumps(updates)]
+                ),
+                1,
+            )
+
+        with (
+            patch.object(display_manager.os, "geteuid", return_value=0),
+            patch.object(display_manager, "_write_display_manager_settings") as write,
+        ):
+            result = display_manager._save_display_manager_settings_as_root(
+                ["lightdm", json.dumps(updates)]
+            )
+
+        self.assertEqual(result, 0)
+        write.assert_called_once_with(DisplayManagerEnum.LightDM, updates)
 
     def test_parser_reports_invalid_configuration_without_raw_parse_error(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -11,8 +11,6 @@ A desktop utility for browsing and applying installed GTK, XFWM4, icon, cursor, 
 ![Desktop: XFCE](https://img.shields.io/badge/desktop-XFCE-2284F2)
 ![Status: In development](https://img.shields.io/badge/status-in%20development-orange)
 
-> **GitHub status:** This workspace does not include a GitHub repository URL or Actions workflow, so repository-specific badges (such as live build, release, or star counts) are not available yet.
-
 ## Features
 
 - **GTK themes:** Discover installed GTK themes, show their installation paths and GTK 2/3/4 and XFWM4 support, and apply a selected theme. Related icon, cursor, or window themes declared by the GTK theme are applied when available.
@@ -20,7 +18,7 @@ A desktop utility for browsing and applying installed GTK, XFWM4, icon, cursor, 
 - **Icon themes:** Browse installed icon themes and view a preview composed from sample icons when the theme provides them.
 - **Cursor themes:** Browse installed Xcursor themes, including themes that inherit cursor assets from another theme, and display a cursor preview when an image is available.
 - **KDE Plasma global themes:** Discover installed look-and-feel packages, inspect their package IDs and descriptions, and apply them to the current KDE user or configure all homes under `/home`.
-- **Display manager information:** Detect LightDM, SDDM, or GDM through the default-display-manager file or systemd service alias, then review the active manager's configured greeter values and their source files. LightDM GTK greeter drop-ins follow GLib's system XDG data/config directory order; its compiled main config location uses the standard `/etc/lightdm/lightdm-gtk-greeter.conf` default. This tab is informational and does not edit system configuration.
+- **Display manager settings:** Detect LightDM, SDDM, or GDM through the default-display-manager file or systemd service alias, review active greeter values and their source files, and edit supported settings with administrator authorization. Updates preserve other configuration content and create a backup copy. LightDM GTK greeter drop-ins follow GLib's system XDG data/config directory order; its compiled main config location uses the standard `/etc/lightdm/lightdm-gtk-greeter.conf` default.
 - **All-user configuration:** Theme tabs provide an opt-in to apply settings to accounts under `/home`. Existing configuration files are backed up before they are changed.
 - **Desktop settings integration:** Apply themes through XFCE settings and, when available, GNOME `gsettings` keys.
 - **Theme details and feedback:** View theme names and paths, see which theme is active when it can be detected, and receive status or error messages while loading or applying settings.
