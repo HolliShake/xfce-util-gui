@@ -4,5 +4,3 @@ Pillow
 CairoSVG>=2.9.0
 cairocffi
 defusedxml
-
-# OS-level dependencies vary by distribution; see the installation section in README.md.

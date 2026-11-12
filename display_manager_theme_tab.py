@@ -110,7 +110,7 @@ class DisplayManagerThemeTab:
         self._build_detection_status()
         self._build_information()
 
-    # ── Header (unchanged from original) ─────────────────────────────────
+    # ── Header ────────────────────────────────────────────────────────────
     def _build_header(self) -> None:
         header = ctk.CTkFrame(self._parent, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=_PAD, pady=(_PAD, 12))
