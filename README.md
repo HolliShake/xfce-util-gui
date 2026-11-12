@@ -2,6 +2,10 @@
 
 A desktop utility for browsing and applying installed GTK, XFWM4, icon, and cursor themes from a single interface. XFCE Utility is built with Python and CustomTkinter and uses the desktop's existing theme settings rather than downloading or installing theme collections.
 
+## Application preview
+
+![XFCE Utility showing the GTK theme tab and installed theme details](./images/Screenshot_2026-11-12_15-18-32.png)
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux)
 ![Desktop: XFCE](https://img.shields.io/badge/desktop-XFCE-2284F2)
