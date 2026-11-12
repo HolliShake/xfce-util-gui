@@ -24,7 +24,7 @@ class XfceUtilApp(ctk.CTk):
         tabs = ctk.CTkTabview(self)
         tabs.pack(fill="both", expand=True, padx=16, pady=16)
         self.gtk_theme_tab = GtkThemeTab(tabs.add("GTK Theme"))
-        create_kde_theme_tab(tabs.add("KDE Theme"))
+        self.kde_theme_tab = create_kde_theme_tab(tabs.add("KDE Theme"))
         self.window_theme_tab = create_window_tab(tabs.add("Window"))
         self.icon_tab = create_icon_theme_tab(tabs.add("Icon"))
         self.cursor_theme_tab = create_cursor_tab(tabs.add("Cursor"))

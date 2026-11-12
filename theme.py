@@ -1,6 +1,7 @@
 import configparser
 import errno
 import io
+import json
 import os
 import shutil
 import stat
@@ -96,6 +97,26 @@ class CursorData:
             f"{self.name}\n"
             f"  Path: {self.absolute_path}\n"
             f"  Sample cursor: {self.model_path if self.model_path else 'Unavailable'}"
+        )
+
+
+class KdeThemeData:
+    """Installed KDE Plasma global look-and-feel theme."""
+
+    def __init__(
+        self, name: str, package_id: str, absolute_path: str, description: str = ""
+    ):
+        self.name = name
+        self.package_id = package_id
+        self.absolute_path = absolute_path
+        self.description = description
+
+    def __str__(self) -> str:
+        return (
+            f"{self.name}\n"
+            f"  Package ID: {self.package_id}\n"
+            f"  Path: {self.absolute_path}\n"
+            f"  Description: {self.description or 'Not available'}"
         )
 
 
@@ -247,6 +268,29 @@ def get_cursor_theme_name() -> str:
                            _GNOME_IFACE, "cursor-theme")
 
 
+def get_kde_theme_name() -> str:
+    """Get the KDE Plasma global theme package configured for this user."""
+    config_home = os.environ.get("XDG_CONFIG_HOME", "")
+    if not os.path.isabs(config_home):
+        config_home = str(Path.home() / ".config")
+    config_path = Path(config_home) / "kdeglobals"
+    settings = configparser.ConfigParser(interpolation=None)
+    settings.optionxform = str
+    try:
+        with config_path.open(encoding="utf-8") as config_file:
+            settings.read_file(config_file)
+        name = settings.get("KDE", "LookAndFeelPackage", fallback="").strip()
+    except FileNotFoundError:
+        raise RuntimeError(
+            "KDE Plasma settings are not configured for this user."
+        ) from None
+    except (OSError, UnicodeError, configparser.Error) as error:
+        raise RuntimeError("Could not read KDE Plasma settings for this user.") from error
+    if not name:
+        raise RuntimeError(f"No KDE global theme is configured in {config_path}")
+    return name
+
+
 def _set_related_theme(kind: str, name: str, channel: str, property_name: str,
                        schema: str, key: str) -> None:
     """Apply a theme to xfconf AND gsettings, whichever of them are available.
@@ -343,6 +387,76 @@ def get_available_window_themes() -> list[WindowData]:
         ]
     except OSError as error:
         raise RuntimeError(f"Failed to get available window themes: {error}") from error
+
+
+# --------------------------------------------------------------------------- #
+# KDE Plasma global themes
+# --------------------------------------------------------------------------- #
+
+def get_available_kde_themes() -> list[KdeThemeData]:
+    """List installed KDE Plasma look-and-feel packages from XDG data directories."""
+    themes: list[KdeThemeData] = []
+    seen_package_ids: set[str] = set()
+    try:
+        for data_root in _xdg_data_dirs():
+            root = data_root / "plasma" / "look-and-feel"
+            try:
+                entries = sorted(root.iterdir(), key=lambda path: path.name.casefold())
+            except FileNotFoundError:
+                continue
+            for entry in entries:
+                if not entry.is_dir():
+                    continue
+                metadata_path = entry / "metadata.json"
+                try:
+                    with metadata_path.open(encoding="utf-8") as metadata_file:
+                        metadata = json.load(metadata_file)
+                except FileNotFoundError:
+                    continue
+                except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                    warnings.warn(
+                        f"Skipping KDE theme at {entry}: invalid metadata.json ({error})",
+                        stacklevel=2,
+                    )
+                    continue
+
+                plugin = metadata.get("KPlugin") if isinstance(metadata, dict) else None
+                if not isinstance(plugin, dict):
+                    continue
+                package_id = plugin.get("Id")
+                if not isinstance(package_id, str) or not package_id.strip():
+                    package_id = entry.name
+                package_id = package_id.strip()
+                try:
+                    _validate_name(package_id, "KDE")
+                except ValueError as error:
+                    warnings.warn(
+                        f"Skipping KDE theme at {entry}: {error}", stacklevel=2
+                    )
+                    continue
+                if package_id in seen_package_ids:
+                    continue
+                seen_package_ids.add(package_id)
+
+                name = plugin.get("Name")
+                if not isinstance(name, str) or not name.strip():
+                    name = entry.name
+                description = plugin.get("Description")
+                if not isinstance(description, str):
+                    description = ""
+                themes.append(
+                    KdeThemeData(
+                        name=name.strip(),
+                        package_id=package_id,
+                        absolute_path=str(entry.absolute()),
+                        description=description.strip(),
+                    )
+                )
+    except OSError as error:
+        raise RuntimeError(
+            "Could not access the installed KDE Plasma theme directories."
+        ) from error
+    return themes
 
 
 # --------------------------------------------------------------------------- #
@@ -667,6 +781,44 @@ def _gtk_theme_settings_ini(old_contents: bytes | None, key: str, name: str) -> 
     return output.getvalue().encode("utf-8")
 
 
+def _kdeglobals_with_theme(old_contents: bytes | None, package_id: str) -> bytes:
+    _validate_name(package_id, "KDE")
+    text = old_contents.decode("utf-8") if old_contents else ""
+    output: list[str] = []
+    current_group: str | None = None
+    has_kde_group = False
+    key_written = False
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and "]" in stripped:
+            if current_group == "KDE" and not key_written:
+                output.append(f"LookAndFeelPackage={package_id}")
+                key_written = True
+            current_group = stripped[1:stripped.index("]")]
+            if current_group == "KDE":
+                has_kde_group = True
+            output.append(line)
+            continue
+
+        if current_group == "KDE":
+            key, separator, _value = line.partition("=")
+            key = key.strip()
+            if separator and (
+                key == "LookAndFeelPackage" or key.startswith("LookAndFeelPackage[")
+            ):
+                continue
+        output.append(line)
+
+    if current_group == "KDE" and not key_written:
+        output.append(f"LookAndFeelPackage={package_id}")
+    if not has_kde_group:
+        if output and output[-1].strip():
+            output.append("")
+        output.extend(("[KDE]", f"LookAndFeelPackage={package_id}"))
+    return ("\n".join(output) + "\n").encode("utf-8")
+
+
 def _xfconf_xml(old_contents: bytes | None, channel: str, group_name: str,
                 property_name: str, name: str) -> bytes:
     """Return xfconf perchannel XML with ``group_name/property_name`` set to ``name``."""
@@ -739,6 +891,20 @@ def _write_gtk_ini_value(home_fd: int, info: os.stat_result, stack: ExitStack,
         old_ini, mode = _read_home_file(gtk_fd, "settings.ini")
         ini = _gtk_theme_settings_ini(old_ini, key, name)
         _replace_home_file(gtk_fd, "settings.ini", ini, info, mode, old_ini)
+
+
+def _write_kde_theme_to_homes(theme: KdeThemeData, homes_root: Path) -> None:
+    _validate_name(theme.package_id, "KDE")
+
+    def action(home_fd: int, info: os.stat_result, stack: ExitStack) -> None:
+        config_fd = _open_directory(home_fd, ".config", info, stack, create=True)
+        old_config, mode = _read_home_file(config_fd, "kdeglobals")
+        new_config = _kdeglobals_with_theme(old_config, theme.package_id)
+        _replace_home_file(
+            config_fd, "kdeglobals", new_config, info, mode, old_config
+        )
+
+    _for_each_home(homes_root, "KDE global theme", action)
 
 
 def _apply_xsettings_theme_to_homes(
@@ -864,7 +1030,7 @@ def _require_trusted_theme_tree(path: Path) -> None:
             or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode))
         ):
             raise RuntimeError(
-                f"Refusing privileged GTK theme access to untrusted asset: {current}"
+                f"Refusing privileged access to untrusted theme asset: {current}"
             )
         if stat.S_ISDIR(info.st_mode):
             pending.extend(current.iterdir())
@@ -931,6 +1097,73 @@ def _system_gtk_theme_for_all_users(name: str, absolute_path: str) -> ThemeData:
     )
 
 
+def _system_kde_theme_for_all_users(package_id: str, absolute_path: str) -> KdeThemeData:
+    _validate_name(package_id, "KDE")
+    selected = Path(absolute_path)
+    if not selected.is_absolute():
+        raise ValueError("The KDE theme path must be absolute")
+
+    for root in (
+        Path("/usr/local/share/plasma/look-and-feel"),
+        Path("/usr/share/plasma/look-and-feel"),
+    ):
+        try:
+            trusted_root = root.resolve(strict=True)
+        except FileNotFoundError:
+            continue
+        root_info = trusted_root.stat()
+        if (
+            not stat.S_ISDIR(root_info.st_mode)
+            or root_info.st_uid != 0
+            or root_info.st_mode & 0o022
+        ):
+            continue
+        try:
+            selected_info = selected.lstat()
+            source = selected.resolve(strict=True)
+        except FileNotFoundError:
+            continue
+        if (
+            stat.S_ISLNK(selected_info.st_mode)
+            or not stat.S_ISDIR(selected_info.st_mode)
+            or selected_info.st_uid != 0
+            or selected_info.st_mode & 0o022
+            or source.parent != trusted_root
+        ):
+            continue
+
+        _require_trusted_theme_tree(source)
+        try:
+            with (source / "metadata.json").open(encoding="utf-8") as metadata_file:
+                metadata = json.load(metadata_file)
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise ValueError(
+                f"Could not validate system KDE theme '{package_id}'."
+            ) from error
+        plugin = metadata.get("KPlugin") if isinstance(metadata, dict) else None
+        if not isinstance(plugin, dict):
+            raise ValueError(f"System KDE theme '{package_id}' has invalid metadata.")
+        declared_id = plugin.get("Id")
+        if not isinstance(declared_id, str) or not declared_id.strip():
+            declared_id = source.name
+        if declared_id.strip() != package_id:
+            raise ValueError("KDE theme package ID and installed path do not match.")
+
+        name = plugin.get("Name")
+        description = plugin.get("Description")
+        return KdeThemeData(
+            name=name.strip() if isinstance(name, str) and name.strip() else package_id,
+            package_id=package_id,
+            absolute_path=str(source),
+            description=description.strip() if isinstance(description, str) else "",
+        )
+
+    raise ValueError(
+        "All-user KDE changes require a theme installed under "
+        "/usr/share/plasma/look-and-feel or /usr/local/share/plasma/look-and-feel."
+    )
+
+
 def _apply_all_users_as_root(arguments: list[str]) -> int:
     if os.geteuid() != 0:
         print("The all-user helper must be run through Polkit.", file=sys.stderr)
@@ -955,6 +1188,9 @@ def _apply_all_users_as_root(arguments: list[str]) -> int:
             _apply_xsettings_theme_to_homes(
                 name, Path("/home"), "cursor", "gtk-cursor-theme-name", "Gtk", "CursorThemeName"
             )
+        elif kind == "kde" and len(arguments) == 3:
+            kde_theme = _system_kde_theme_for_all_users(name, arguments[2])
+            _write_kde_theme_to_homes(kde_theme, Path("/home"))
         else:
             print("Invalid all-user helper operation.", file=sys.stderr)
             return 2
@@ -965,7 +1201,7 @@ def _apply_all_users_as_root(arguments: list[str]) -> int:
 
 
 def _apply_all_users_with_authentication(
-    kind: str, theme: ThemeData | WindowData | IconData | CursorData
+    kind: str, theme: ThemeData | WindowData | IconData | CursorData | KdeThemeData
 ) -> None:
     pkexec = shutil.which("pkexec")
     if pkexec is None:
@@ -984,11 +1220,15 @@ def _apply_all_users_with_authentication(
         str(application),
         "--apply-all-users",
         kind,
-        theme.name,
+        theme.package_id if kind == "kde" and isinstance(theme, KdeThemeData) else theme.name,
     ]
     if kind == "gtk":
         if not isinstance(theme, ThemeData):
             raise TypeError("GTK all-user operation requires ThemeData")
+        arguments.append(theme.absolute_path)
+    elif kind == "kde":
+        if not isinstance(theme, KdeThemeData):
+            raise TypeError("KDE all-user operation requires KdeThemeData")
         arguments.append(theme.absolute_path)
 
     result = subprocess.run(arguments, capture_output=True, text=True, check=False)
@@ -1072,24 +1312,49 @@ def select_window_theme(theme: WindowData, applyToAllUser: bool = False) -> None
     _set_related_theme("window", theme.name, "xfwm4", "/general/theme", _GNOME_WM, "theme")
 
 
+def select_kde_theme(theme: KdeThemeData, applyToAllUser: bool = False) -> None:
+    """Apply a KDE Plasma global theme, optionally configuring every home under /home."""
+    if not isinstance(theme, KdeThemeData):
+        raise TypeError("theme must be an instance of KdeThemeData")
+    _validate_name(theme.package_id, "KDE")
+    lookandfeeltool = shutil.which("lookandfeeltool")
+    if lookandfeeltool is None:
+        raise RuntimeError(
+            "Cannot apply a KDE theme: KDE Plasma's lookandfeeltool is not installed."
+        )
+    if applyToAllUser:
+        _apply_all_users_with_authentication("kde", theme)
+    try:
+        _run([lookandfeeltool, "--apply", theme.package_id])
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise RuntimeError(
+            f"Could not apply KDE theme '{theme.name}'. "
+            "Check that KDE Plasma is available and try again."
+        ) from error
+
+
 __all__ = [
     "ThemeError",
     "ThemeData",
     "IconData",
     "WindowData",
     "CursorData",
+    "KdeThemeData",
     "get_gtk_theme_name",
     "get_window_theme_name",
     "get_icon_theme_name",
     "get_cursor_theme_name",
+    "get_kde_theme_name",
     "get_available_themes",
     "get_available_window_themes",
     "get_available_icon_themes",
     "get_available_cursor_themes",
+    "get_available_kde_themes",
     "select_icon_theme",
     "select_gtk_theme",
     "select_window_theme",
     "select_cursor_theme",
+    "select_kde_theme",
 ]
 
 if __name__ == "__main__":

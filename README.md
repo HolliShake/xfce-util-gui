@@ -1,6 +1,6 @@
 # XFCE Utility
 
-A desktop utility for browsing and applying installed GTK, XFWM4, icon, and cursor themes from a single interface. XFCE Utility is built with Python and CustomTkinter and uses the desktop's existing theme settings rather than downloading or installing theme collections.
+A desktop utility for browsing and applying installed GTK, XFWM4, icon, cursor, and KDE Plasma global themes from a single interface. XFCE Utility is built with Python and CustomTkinter and uses the desktop's existing theme settings rather than downloading or installing theme collections.
 
 ## Application preview
 
@@ -19,11 +19,12 @@ A desktop utility for browsing and applying installed GTK, XFWM4, icon, and curs
 - **Window themes:** Browse and apply installed XFWM4 window-decoration themes.
 - **Icon themes:** Browse installed icon themes and view a preview composed from sample icons when the theme provides them.
 - **Cursor themes:** Browse installed Xcursor themes, including themes that inherit cursor assets from another theme, and display a cursor preview when an image is available.
-- **All-user configuration:** GTK, window, icon, and cursor tabs provide an opt-in to apply settings to accounts under `/home`. Existing configuration files are backed up before they are changed.
+- **KDE Plasma global themes:** Discover installed look-and-feel packages, inspect their package IDs and descriptions, and apply them to the current KDE user or configure all homes under `/home`.
+- **All-user configuration:** Theme tabs provide an opt-in to apply settings to accounts under `/home`. Existing configuration files are backed up before they are changed.
 - **Desktop settings integration:** Apply themes through XFCE settings and, when available, GNOME `gsettings` keys.
 - **Theme details and feedback:** View theme names and paths, see which theme is active when it can be detected, and receive status or error messages while loading or applying settings.
 
-The **KDE Theme** tab is currently a placeholder; KDE theme management is not implemented yet.
+KDE theme application requires KDE Plasma's `lookandfeeltool` (typically provided by `plasma-workspace`) and changes KDE configuration; it does not change XFCE themes. The KDE all-user option requires the selected theme to be installed system-wide under `/usr/share/plasma/look-and-feel` or `/usr/local/share/plasma/look-and-feel`.
 
 ## Requirements
 
@@ -31,6 +32,7 @@ The **KDE Theme** tab is currently a placeholder; KDE theme management is not im
 - Python 3.10 or newer.
 - Python packages listed in [`requirements.txt`](requirements.txt).
 - On Ubuntu, the Tk, Cairo, Xcursor, and Polkit packages listed below. An XFCE Polkit authentication agent must be running for all-user changes.
+- Applying KDE Plasma global themes additionally requires `lookandfeeltool`; this is optional if you only use the XFCE theme tabs.
 
 ## Build and system-wide installation
 
@@ -67,7 +69,7 @@ For development without a global install, activate a virtual environment, instal
 3. Select **Apply** to update the current desktop settings.
 4. To update configuration for other accounts, enable the all-user option before applying. XFCE Utility stays in your desktop session and requests authentication through the native Polkit dialog only for this operation.
 
-All-user changes target home directories under `/home`. Settings changed through a live desktop session affect the current session; other users' running sessions are not changed live. GTK themes selected for all-user use must be installed in `/usr/share/themes` or `/usr/local/share/themes`. All-user operations require the root-owned system installation described above; do not launch the whole GUI as root.
+All-user changes target home directories under `/home`. Settings changed through a live desktop session affect the current session; other users' running sessions are not changed live. GTK themes selected for all-user use must be installed in `/usr/share/themes` or `/usr/local/share/themes`; KDE global themes must be installed in `/usr/share/plasma/look-and-feel` or `/usr/local/share/plasma/look-and-feel`. All-user operations require the root-owned system installation described above; do not launch the whole GUI as root.
 
 ## Development
 
