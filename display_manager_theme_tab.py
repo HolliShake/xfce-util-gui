@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 import logging
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import BooleanVar, StringVar, filedialog, messagebox
 
 import customtkinter as ctk
 
@@ -11,6 +11,7 @@ from theme import (
     get_available_icon_themes,
     get_available_themes,
 )
+from scrollable_dropdown import ScrollableComboBox
 from supported_display_manager import (
     DisplayManagerConfigError,
     DisplayManagerEnum,
@@ -59,6 +60,25 @@ _THEME_SETTING_KINDS = {
     "cursor-theme-name": "cursor",
     "CursorTheme": "cursor",
 }
+_XFT_RADIO_CHOICES = {
+    "xft-antialias": (("On", "true"), ("Off", "false")),
+    "xft-hintstyle": (
+        ("None", "hintnone"),
+        ("Slight", "hintslight"),
+        ("Medium", "hintmedium"),
+        ("Full", "hintfull"),
+    ),
+    "xft-rgba": (
+        ("None", "none"),
+        ("RGB", "rgb"),
+        ("BGR", "bgr"),
+        ("Vertical RGB", "vrgb"),
+        ("Vertical BGR", "vbgr"),
+    ),
+}
+_XFT_DPI_MIN = 50
+_XFT_DPI_MAX = 300
+_XFT_DPI_DEFAULT = 96
 
 
 class DisplayManagerThemeTab:
@@ -255,10 +275,18 @@ class DisplayManagerThemeTab:
         config_error: str | None,
     ) -> None:
         self._setting_entries: dict[
-            str, ctk.CTkEntry | ctk.CTkComboBox | ctk.CTkSwitch
+            str,
+            ctk.CTkEntry
+            | ctk.CTkComboBox
+            | ctk.CTkSwitch
+            | ctk.CTkFrame
         ] = {}
         self._setting_initial: dict[str, str | None] = {}
         self._setting_initial_switches: dict[str, bool] = {}
+        self._setting_radio_vars: dict[str, StringVar] = {}
+        self._setting_dpi_sliders: dict[str, ctk.CTkSlider] = {}
+        self._setting_dpi_labels: dict[str, ctk.CTkLabel] = {}
+        self._setting_touched: set[str] = set()
         self._font_preview = None
         card = ctk.CTkFrame(
             parent,
@@ -450,8 +478,10 @@ class DisplayManagerThemeTab:
             text="Save changes",
             command=self._save_settings,
             state="disabled" if config_error else "normal",
-            fg_color=_ACCENT,
+            fg_color=_SURFACE_ALT,
             hover_color=_ACCENT_HOVER,
+            text_color=("white", "white"),
+            text_color_disabled=_MUTED,
             height=34,
             corner_radius=8,
             font=ctk.CTkFont(size=13, weight="bold"),
@@ -615,24 +645,81 @@ class DisplayManagerThemeTab:
                 if parsed_value is not None
                 else True
             )
+            switch_variable = BooleanVar(master=row_frame, value=initial_enabled)
             value_entry = ctk.CTkSwitch(
                 row_frame,
-                text="Enabled",
+                text="Display user background",
+                variable=switch_variable,
+                onvalue=True,
+                offvalue=False,
                 font=self._f_body,
-                height=32,
                 state="disabled" if config_error else "normal",
-                fg_color=_BORDER_INPUT,
+                bg_color=_SURFACE,
                 progress_color=_ACCENT,
-                button_color=_SURFACE,
                 button_hover_color=_ACCENT_HOVER,
-                text_color=_TEXT,
+                switch_width=40,
+                switch_height=20,
                 command=self._sync_save_state,
             )
-            if initial_enabled:
-                value_entry.select()
-            else:
-                value_entry.deselect()
             self._setting_initial_switches[setting.name] = initial_enabled
+        elif setting.name in _XFT_RADIO_CHOICES:
+            value_entry = ctk.CTkFrame(row_frame, fg_color="transparent")
+            value = self._normalize_xft_value(
+                setting.name,
+                parsed_value.value if parsed_value is not None else None,
+            )
+            radio_variable = StringVar(master=value_entry, value=value)
+            self._setting_radio_vars[setting.name] = radio_variable
+            for column, (label, option) in enumerate(
+                _XFT_RADIO_CHOICES[setting.name]
+            ):
+                ctk.CTkRadioButton(
+                    value_entry,
+                    text=label,
+                    variable=radio_variable,
+                    value=option,
+                    font=self._f_small,
+                    fg_color=_ACCENT,
+                    hover_color=_ACCENT_HOVER,
+                    border_color=_BORDER_INPUT,
+                    text_color=_TEXT,
+                    state="disabled" if config_error else "normal",
+                    command=lambda name=setting.name: self._on_radio_change(name),
+                ).grid(row=0, column=column, sticky="w", padx=(0, 8))
+        elif setting.name == "xft-dpi":
+            value_entry = ctk.CTkFrame(row_frame, fg_color="transparent")
+            value_entry.grid_columnconfigure(0, weight=1)
+            dpi_value = self._parse_xft_dpi(
+                parsed_value.value if parsed_value is not None else None
+            )
+            dpi_slider = ctk.CTkSlider(
+                value_entry,
+                from_=_XFT_DPI_MIN,
+                to=_XFT_DPI_MAX,
+                number_of_steps=_XFT_DPI_MAX - _XFT_DPI_MIN,
+                height=24,
+                fg_color=_BORDER_INPUT,
+                progress_color=_ACCENT,
+                button_color=_ACCENT,
+                button_hover_color=_ACCENT_HOVER,
+                state="disabled" if config_error else "normal",
+            )
+            dpi_slider.set(dpi_value)
+            dpi_slider.grid(row=0, column=0, sticky="ew", padx=(0, 12))
+            dpi_label = ctk.CTkLabel(
+                value_entry,
+                text=f"{dpi_value} DPI",
+                font=self._f_mono,
+                text_color=_TEXT_SECONDARY,
+                width=64,
+                anchor="e",
+            )
+            dpi_label.grid(row=0, column=1, sticky="e")
+            dpi_slider.configure(
+                command=lambda value: self._on_dpi_change(setting.name, value)
+            )
+            self._setting_dpi_sliders[setting.name] = dpi_slider
+            self._setting_dpi_labels[setting.name] = dpi_label
         elif theme_kind is not None:
             choices = self._get_installed_choices(theme_kind)
             if choices is not None and parsed_value is not None:
@@ -640,7 +727,7 @@ class DisplayManagerThemeTab:
             combo_values = list(choices or ())
             if choices is not None and parsed_value is None:
                 combo_values.insert(0, "")
-            value_entry = ctk.CTkComboBox(
+            value_entry = ScrollableComboBox(
                 row_frame,
                 values=combo_values,
                 font=self._f_mono,
@@ -680,7 +767,13 @@ class DisplayManagerThemeTab:
             if parsed_value is not None:
                 value_entry.insert(0, parsed_value.value)
 
-        value_entry.grid(row=3, column=0, sticky="ew", padx=(22, 0), pady=(0, 2))
+        value_entry.grid(
+            row=3,
+            column=0,
+            sticky="w" if setting.name == "user-background" else "ew",
+            padx=(22, 0),
+            pady=(0, 2),
+        )
         if browse_background:
             ctk.CTkButton(
                 row_frame,
@@ -735,7 +828,8 @@ class DisplayManagerThemeTab:
         self._setting_initial[setting.name] = (
             parsed_value.value if parsed_value is not None else None
         )
-        self._attach_change_tracking(setting.name, value_entry)
+        if setting.name not in _XFT_RADIO_CHOICES and setting.name != "xft-dpi":
+            self._attach_change_tracking(setting.name, value_entry)
 
         if index < total - 1:
             ctk.CTkFrame(
@@ -784,6 +878,43 @@ class DisplayManagerThemeTab:
             self._update_font_preview(widget.get())
         self._sync_save_state()
 
+    def _on_radio_change(self, _name: str) -> None:
+        self._sync_save_state()
+
+    def _on_dpi_change(self, name: str, value: float) -> None:
+        self._setting_touched.add(name)
+        self._setting_dpi_labels[name].configure(text=f"{round(value)} DPI")
+        self._sync_save_state()
+
+    @staticmethod
+    def _normalize_xft_value(name: str, value: str | None) -> str:
+        normalized = (value or "").strip().casefold()
+        if name == "xft-antialias":
+            return {
+                "1": "true",
+                "yes": "true",
+                "on": "true",
+                "0": "false",
+                "no": "false",
+                "off": "false",
+            }.get(normalized, normalized)
+        if name == "xft-hintstyle" and normalized in {
+            "none",
+            "slight",
+            "medium",
+            "full",
+        }:
+            return f"hint{normalized}"
+        return normalized
+
+    @staticmethod
+    def _parse_xft_dpi(value: str | None) -> int:
+        try:
+            dpi = round(float(value)) if value is not None else _XFT_DPI_DEFAULT
+        except (OverflowError, ValueError):
+            dpi = _XFT_DPI_DEFAULT
+        return min(max(dpi, _XFT_DPI_MIN), _XFT_DPI_MAX)
+
     def _update_font_preview(self, font_description: str) -> None:
         if self._font_preview is None:
             return
@@ -820,6 +951,27 @@ class DisplayManagerThemeTab:
     def _current_updates(self) -> dict[str, str]:
         updates: dict[str, str] = {}
         for key, entry in self._setting_entries.items():
+            if key in self._setting_radio_vars:
+                current = self._setting_radio_vars[key].get()
+                initial = self._normalize_xft_value(
+                    key, self._setting_initial[key]
+                )
+                if current != initial:
+                    updates[key] = current
+                continue
+            if key in self._setting_dpi_sliders:
+                if key not in self._setting_touched:
+                    continue
+                current = str(round(self._setting_dpi_sliders[key].get()))
+                initial = self._setting_initial[key]
+                if initial is not None:
+                    try:
+                        if float(initial) == float(current):
+                            continue
+                    except ValueError:
+                        pass
+                updates[key] = current
+                continue
             if isinstance(entry, ctk.CTkSwitch):
                 current_state = bool(entry.get())
                 if current_state != self._setting_initial_switches[key]:
@@ -868,7 +1020,11 @@ class DisplayManagerThemeTab:
         updates = self._current_updates()
         disabled = getattr(self, "_config_error_active", False)
         if updates:
-            self._save_button.configure(state="normal" if not disabled else "disabled")
+            can_save = not disabled
+            self._save_button.configure(
+                state="normal" if can_save else "disabled",
+                fg_color=_ACCENT if can_save else _SURFACE_ALT,
+            )
             if hasattr(self, "_save_hint"):
                 count = len(updates)
                 self._save_hint.configure(
@@ -878,7 +1034,7 @@ class DisplayManagerThemeTab:
                     text_color=_TEXT_SECONDARY,
                 )
         else:
-            self._save_button.configure(state="disabled")
+            self._save_button.configure(state="disabled", fg_color=_SURFACE_ALT)
             if hasattr(self, "_save_hint"):
                 self._save_hint.configure(text="No unsaved changes", text_color=_MUTED)
 

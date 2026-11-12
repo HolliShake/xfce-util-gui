@@ -4,6 +4,8 @@ from tkinter import BooleanVar, messagebox
 
 import customtkinter as ctk
 
+from scrollable_dropdown import ScrollableComboBox
+
 from theme import ThemeData, get_available_themes, get_gtk_theme_name, select_gtk_theme
 
 # ── Design tokens ────────────────────────────────────────────────────────────
@@ -143,7 +145,7 @@ class GtkThemeTab:
         ctk.CTkLabel(card, text="THEME", font=self._f_chip, text_color=_MUTED, anchor="w").grid(
             row=0, column=0, sticky="w", padx=16, pady=(14, 4)
         )
-        self._theme_picker = ctk.CTkComboBox(
+        self._theme_picker = ScrollableComboBox(
             card, values=[], state="disabled", command=self._on_select,
             height=38, corner_radius=10, border_width=1, border_color=_BORDER,
             fg_color=_SURFACE_ALT, text_color=_TEXT, font=self._f_body,

@@ -4,6 +4,7 @@ from tkinter import BooleanVar, messagebox
 
 import customtkinter as ctk
 
+from scrollable_dropdown import ScrollableComboBox
 from theme import (
     KdeThemeData,
     get_available_kde_themes,
@@ -137,7 +138,7 @@ class KdeThemeTab:
             text_color=_MUTED,
             anchor="w",
         ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 4))
-        self._theme_picker = ctk.CTkComboBox(
+        self._theme_picker = ScrollableComboBox(
             card,
             values=[],
             state="disabled",

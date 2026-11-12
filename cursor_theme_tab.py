@@ -6,6 +6,8 @@ from pathlib import Path
 from tkinter import BooleanVar, messagebox
 
 import customtkinter as ctk
+
+from scrollable_dropdown import ScrollableComboBox
 from PIL import Image
 
 from theme import CursorData, get_available_cursor_themes, get_cursor_theme_name, select_cursor_theme
@@ -157,7 +159,7 @@ class CursorThemeTab:
         ctk.CTkLabel(
             card, text="CURSOR THEME", font=self._f_chip, text_color=_MUTED, anchor="w"
         ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 4))
-        self._theme_picker = ctk.CTkComboBox(
+        self._theme_picker = ScrollableComboBox(
             card, values=[], state="disabled", command=self._on_select,
             height=38, corner_radius=10, border_width=1, border_color=_BORDER,
             fg_color=_SURFACE_ALT, text_color=_TEXT, font=self._f_body,

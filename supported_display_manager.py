@@ -68,7 +68,7 @@ _DISPLAY_MANAGERS = {
             ),
             DisplayManagerSetting("xft-hintstyle", "Font hinting style."),
             DisplayManagerSetting("xft-rgba", "Subpixel rendering order."),
-            DisplayManagerSetting("xft-dpi", "Font rendering DPI."),
+            DisplayManagerSetting("xft-dpi", "Font rendering DPI (50-300)."),
         ),
         note=(
             "The greeter loads configuration from GLib's system data directories, "
@@ -469,6 +469,34 @@ def _require_trusted_root_path(path: Path, description: str) -> Path:
     return resolved
 
 
+def _trusted_helper_application() -> Path:
+    module_name = Path(__file__).name
+    candidates = [Path(__file__)]
+    candidates.extend(
+        Path(entry) / module_name for entry in sys.path if entry
+    )
+    candidates.extend(
+        Path("/opt/xfceutil/venv/lib").glob(
+            f"python*/site-packages/{module_name}"
+        )
+    )
+
+    checked: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=True)
+            if resolved in checked:
+                continue
+            checked.add(resolved)
+            return _require_trusted_root_path(resolved, "application files")
+        except (OSError, RuntimeError):
+            continue
+    raise RuntimeError(
+        "Saving display-manager settings requires the root-owned system "
+        "installation. Launch the installed XFCE Utility or install it first."
+    )
+
+
 def _write_display_manager_settings(
     manager: DisplayManagerEnum, updates: Mapping[str, str]
 ) -> None:
@@ -541,7 +569,7 @@ def save_display_manager_settings(
             "Polkit is unavailable. Install pkexec and a desktop authentication agent."
         )
     interpreter = _require_trusted_root_path(Path(sys.executable), "Python interpreter")
-    application = _require_trusted_root_path(Path(__file__), "application files")
+    application = _trusted_helper_application()
     pkexec_path = _require_trusted_root_path(Path(pkexec), "Polkit executable")
     encoded_updates = json.dumps(dict(updates), separators=(",", ":"))
     command = [

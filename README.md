@@ -30,12 +30,12 @@ KDE theme application requires KDE Plasma's `lookandfeeltool` (typically provide
 - Linux with XFCE settings tools available (`xfconf-query`); `gsettings` is used when available.
 - Python 3.10 or newer.
 - Python packages listed in [`requirements.txt`](requirements.txt).
-- On Ubuntu, the Tk, Cairo, Xcursor, and Polkit packages listed below. An XFCE Polkit authentication agent must be running for all-user changes.
+- On Ubuntu, the Tk, Cairo, Xcursor, and Polkit packages listed below. An XFCE Polkit authentication agent must be running for display-manager saves and all-user changes.
 - Applying KDE Plasma global themes additionally requires `lookandfeeltool`; this is optional if you only use the XFCE theme tabs.
 
 ## Build and system-wide installation
 
-The installer builds a wheel in a project-local virtual environment, installs it in a dedicated root-owned environment under `/opt/xfceutil`, and registers a system launcher and XFCE Utility icon. The app itself runs as your desktop user; Polkit authentication is requested only for all-user changes.
+The installer builds a wheel in a project-local virtual environment, installs it in a dedicated root-owned environment under `/opt/xfceutil`, removes group/other write permissions from that environment, and registers a system launcher and XFCE Utility icon. The app itself runs as your desktop user; Polkit authentication is requested for display-manager saves and all-user changes.
 
 On Ubuntu, Install the runtime packages and Python build tools:
 
@@ -68,7 +68,7 @@ For development without a global install, activate a virtual environment, instal
 3. Select **Apply** to update the current desktop settings.
 4. To update configuration for other accounts, enable the all-user option before applying. XFCE Utility stays in your desktop session and requests authentication through the native Polkit dialog only for this operation.
 
-All-user changes target home directories under `/home`. Settings changed through a live desktop session affect the current session; other users' running sessions are not changed live. GTK themes selected for all-user use must be installed in `/usr/share/themes` or `/usr/local/share/themes`; KDE global themes must be installed in `/usr/share/plasma/look-and-feel` or `/usr/local/share/plasma/look-and-feel`. All-user operations require the root-owned system installation described above; do not launch the whole GUI as root.
+All-user changes target home directories under `/home`. Settings changed through a live desktop session affect the current session; other users' running sessions are not changed live. GTK themes selected for all-user use must be installed in `/usr/share/themes` or `/usr/local/share/themes`; KDE global themes must be installed in `/usr/share/plasma/look-and-feel` or `/usr/local/share/plasma/look-and-feel`. Display-manager saves and all-user operations require the root-owned system installation described above; do not launch the whole GUI as root.
 
 ## Development
 

@@ -313,6 +313,31 @@ class SupportedDisplayManagerTests(unittest.TestCase):
         self.assertEqual(command[-2], "sddm")
         self.assertEqual(json.loads(command[-1]), {"Current": "Breeze"})
 
+    def test_trusted_helper_uses_installed_copy_when_source_is_untrusted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            installed_helper = Path(temporary) / "supported_display_manager.py"
+            installed_helper.touch()
+
+            def require_trusted(path, _description):
+                resolved = Path(path).resolve()
+                if resolved == installed_helper.resolve():
+                    return resolved
+                raise RuntimeError("untrusted candidate")
+
+            with (
+                patch.object(display_manager.sys, "path", []),
+                patch.object(Path, "glob", return_value=[installed_helper]),
+                patch.object(
+                    display_manager,
+                    "_require_trusted_root_path",
+                    side_effect=require_trusted,
+                ),
+            ):
+                self.assertEqual(
+                    display_manager._trusted_helper_application(),
+                    installed_helper.resolve(),
+                )
+
     def test_root_helper_rejects_non_root_and_dispatches_whitelisted_settings(self):
         updates = {"theme-name": "Vimix"}
         with patch.object(display_manager.os, "geteuid", return_value=1000):

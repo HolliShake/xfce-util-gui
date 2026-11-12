@@ -3,6 +3,8 @@ from tkinter import BooleanVar, messagebox
 
 import customtkinter as ctk
 
+from scrollable_dropdown import ScrollableComboBox
+
 from theme import WindowData, get_available_window_themes, get_window_theme_name, select_window_theme
 
 _ACCENT = ("#2563eb", "#3b82f6")
@@ -122,7 +124,7 @@ class WindowThemeTab:
         ctk.CTkLabel(
             card, text="WINDOW THEME", font=self._f_chip, text_color=_MUTED, anchor="w"
         ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 4))
-        self._theme_picker = ctk.CTkComboBox(
+        self._theme_picker = ScrollableComboBox(
             card,
             values=[],
             state="disabled",
