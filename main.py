@@ -17,6 +17,7 @@ from window_theme_tab import create_window_tab
 class XfceUtilApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__(className="Xfceutil")
+        self.withdraw()
         self.title("XFCE Utility")
         self._set_window_icon()
         self.geometry("760x760")
@@ -32,6 +33,8 @@ class XfceUtilApp(ctk.CTk):
         self.window_theme_tab = create_window_tab(tabs.add("Window"))
         self.icon_tab = create_icon_theme_tab(tabs.add("Icon"))
         self.cursor_theme_tab = create_cursor_tab(tabs.add("Cursor"))
+        self.update_idletasks()
+        self.deiconify()
 
     def _set_window_icon(self) -> None:
         icon_paths = (

@@ -27,24 +27,43 @@ KDE theme application requires KDE Plasma's `lookandfeeltool` (typically provide
 
 ## Requirements
 
-- Linux with XFCE settings tools available (`xfconf-query`); `gsettings` is used when available.
+- Linux with either XFCE's `xfconf-query` or a compatible `gsettings` backend for applying desktop themes. `xfconf-query` is required for XFCE-specific settings.
 - Python 3.10 or newer.
 - Python packages listed in [`requirements.txt`](requirements.txt).
-- On Ubuntu, the Tk, Cairo, Xcursor, and Polkit packages listed below. An XFCE Polkit authentication agent must be running for display-manager saves and all-user changes.
-- Applying KDE Plasma global themes additionally requires `lookandfeeltool`; this is optional if you only use the XFCE theme tabs.
+- Tkinter and the Cairo shared library are required by the UI and SVG rendering.
+- Xcursor, `gsettings`, Fontconfig's `fc-list`, and KDE's `lookandfeeltool` enable their respective previews or integrations; they are optional.
+- Display-manager saves and all-user changes require the system's existing `pkexec` and an active desktop Polkit authentication agent. XFCE Utility does not install or start another agent.
 
 ## Build and system-wide installation
 
 The installer builds a wheel in a project-local virtual environment, installs it in a dedicated root-owned environment under `/opt/xfceutil`, removes group/other write permissions from that environment, and registers a system launcher and XFCE Utility icon. The app itself runs as your desktop user; Polkit authentication is requested for display-manager saves and all-user changes.
 
-On Ubuntu, Install the runtime packages and Python build tools:
+Install the system packages for your distribution before running the installer. Package names below are for common releases and may vary by version:
 
+**Debian, Ubuntu, and derivatives**
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin
+sudo apt install python3 python3-venv python3-tk libcairo2 xfconf
 ```
 
-The app uses the system's existing Polkit `pkexec` and authentication agent; do not install another Polkit agent for XFCE Utility.
+**Fedora**
+```bash
+sudo dnf install python3 python3-tkinter cairo xfconf
+```
+
+**Arch Linux and Manjaro**
+```bash
+sudo pacman -S --needed python tk cairo xfconf
+```
+
+**openSUSE**
+```bash
+sudo zypper install python3 python3-tk cairo xfconf
+```
+
+For cursor previews, also install the Xcursor runtime library (`libxcursor1` on Debian/Ubuntu and openSUSE, `libXcursor` on Fedora, or `libxcursor` on Arch). For GNOME settings integration, install the package providing `gsettings` (`libglib2.0-bin`, `glib2`, or `glib2-tools`, respectively). Font listing needs Fontconfig's `fc-list`. KDE Plasma theme application additionally needs `lookandfeeltool`, usually provided by `plasma-workspace`.
+
+These are OS-level libraries and commands; Python dependencies are installed into the app's virtual environment by `./install.sh`. Use the package search for your distribution if a package name differs. Do not install another Polkit agent if your desktop already provides one.
 
 From the project directory, run the installer as your normal desktop user:
 
