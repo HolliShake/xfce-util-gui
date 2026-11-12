@@ -1,6 +1,6 @@
 # XFCE Utility
 
-A desktop utility for browsing and applying installed GTK, XFWM4, icon, cursor, and KDE Plasma global themes from a single interface. XFCE Utility is built with Python and CustomTkinter and uses the desktop's existing theme settings rather than downloading or installing theme collections.
+A desktop utility for browsing and applying installed GTK, XFWM4, icon, cursor, and KDE Plasma global themes, and reviewing display-manager appearance options from a single interface. XFCE Utility is built with Python and CustomTkinter and uses the desktop's existing theme settings rather than downloading or installing theme collections.
 
 ## Application preview
 
@@ -20,6 +20,7 @@ A desktop utility for browsing and applying installed GTK, XFWM4, icon, cursor, 
 - **Icon themes:** Browse installed icon themes and view a preview composed from sample icons when the theme provides them.
 - **Cursor themes:** Browse installed Xcursor themes, including themes that inherit cursor assets from another theme, and display a cursor preview when an image is available.
 - **KDE Plasma global themes:** Discover installed look-and-feel packages, inspect their package IDs and descriptions, and apply them to the current KDE user or configure all homes under `/home`.
+- **Display manager information:** Detect LightDM, SDDM, or GDM through the default-display-manager file or systemd service alias, then review the active manager's configured greeter values and their source files. LightDM GTK greeter drop-ins follow GLib's system XDG data/config directory order; its compiled main config location uses the standard `/etc/lightdm/lightdm-gtk-greeter.conf` default. This tab is informational and does not edit system configuration.
 - **All-user configuration:** Theme tabs provide an opt-in to apply settings to accounts under `/home`. Existing configuration files are backed up before they are changed.
 - **Desktop settings integration:** Apply themes through XFCE settings and, when available, GNOME `gsettings` keys.
 - **Theme details and feedback:** View theme names and paths, see which theme is active when it can be detected, and receive status or error messages while loading or applying settings.

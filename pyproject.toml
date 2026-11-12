@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xfce-util"
-version = "0.1.7"
+version = "0.1.8"
 description = "A desktop utility for browsing and applying installed themes"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,6 +31,7 @@ xfce-util = "main:main"
 [tool.setuptools]
 py-modules = [
     "cursor_theme_tab",
+    "display_manager_theme_tab",
     "gtk_theme_tab",
     "icon_theme_tab",
     "kde_theme_tab",

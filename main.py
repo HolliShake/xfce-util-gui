@@ -7,6 +7,7 @@ import customtkinter as ctk
 from PIL import Image, ImageTk
 
 from cursor_theme_tab import create_cursor_tab
+from display_manager_theme_tab import create_display_manager_theme_tab
 from gtk_theme_tab import GtkThemeTab
 from icon_theme_tab import create_icon_theme_tab
 from kde_theme_tab import create_kde_theme_tab
@@ -23,6 +24,9 @@ class XfceUtilApp(ctk.CTk):
 
         tabs = ctk.CTkTabview(self)
         tabs.pack(fill="both", expand=True, padx=16, pady=16)
+        self.display_manager_theme_tab = create_display_manager_theme_tab(
+            tabs.add("Display Manager")
+        )
         self.gtk_theme_tab = GtkThemeTab(tabs.add("GTK Theme"))
         self.kde_theme_tab = create_kde_theme_tab(tabs.add("KDE Theme"))
         self.window_theme_tab = create_window_tab(tabs.add("Window"))
