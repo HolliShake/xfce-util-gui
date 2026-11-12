@@ -30,7 +30,7 @@ xfce-util = "main:main"
 
 [tool.setuptools]
 py-modules = [
-    "cursor_tab",
+    "cursor_theme_tab",
     "gtk_theme_tab",
     "icon_theme_tab",
     "kde_theme_tab",

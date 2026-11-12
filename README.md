@@ -30,38 +30,24 @@ The **KDE Theme** tab is currently a placeholder; KDE theme management is not im
 
 ## Build and system-wide installation
 
-The steps below build a wheel and install it in a dedicated virtual environment under `/opt/xfceutil`. A small system launcher in `/usr/local/bin` starts the app as your desktop user. The app requests Polkit authentication only for all-user changes; **pipx is not required**.
+The installer builds a wheel in a project-local virtual environment, installs it in a dedicated root-owned environment under `/opt/xfceutil`, and registers a system launcher. The app itself runs as your desktop user; Polkit authentication is requested only for all-user changes.
 
-On Ubuntu, install the runtime and build tools:
+On Ubuntu, Install the runtime packages and Python build tools:
 
 ```bash
 sudo apt update
 sudo apt install python3 python3-venv python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin polkitd pkexec xfce-polkit
 ```
 
-Build the wheel from the project directory:
+From the project directory, run the installer as your normal desktop user:
 
 ```bash
-python3 -m venv .build-venv
-source .build-venv/bin/activate
-python -m pip install --upgrade build
-python -m build
-deactivate
+./install.sh
 ```
 
-Install the wheel into a root-owned virtual environment and add the system launcher:
+The installer prompts for sudo when it creates or updates the system environment. It leaves the build wheel and local build environment in `dist/` and `.build-venv/`. The general pattern—an isolated Python environment plus a launcher and desktop entry—is also used by the [`desktop-app` project](https://github.com/chrisjbillington/desktop-app).
 
-```bash
-sudo install -d -m 755 /opt/xfceutil
-sudo python3 -m venv /opt/xfceutil/venv
-sudo /opt/xfceutil/venv/bin/python -m pip install --only-binary=:all: --upgrade dist/xfce_util-0.1.2-py3-none-any.whl
-sudo install -Dm755 xfce-util-launcher /usr/local/bin/xfce-util
-sudo install -Dm644 xfce-util.desktop /usr/local/share/applications/xfce-util.desktop
-```
-
-Log out and back in, or refresh the desktop's application menu if the launcher does not appear immediately. You can also start the application from a terminal with `xfce-util`.
-
-When updating an existing installation, rebuild the wheel and rerun the `pip install` command above with the new wheel. To uninstall:
+Run `./install.sh` again to update. To uninstall:
 
 ```bash
 sudo rm /usr/local/bin/xfce-util /usr/local/share/applications/xfce-util.desktop
