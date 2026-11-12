@@ -563,10 +563,13 @@ def save_display_manager_settings(
         _write_display_manager_settings(manager, updates)
         return
 
-    pkexec = shutil.which("pkexec")
+    from polkit import detect_polkit
+
+    pkexec = detect_polkit()
     if pkexec is None:
         raise RuntimeError(
-            "Polkit is unavailable. Install pkexec and a desktop authentication agent."
+            "Polkit is unavailable. Ensure pkexec and a desktop authentication agent "
+            "are installed."
         )
     interpreter = _require_trusted_root_path(Path(sys.executable), "Python interpreter")
     application = _trusted_helper_application()

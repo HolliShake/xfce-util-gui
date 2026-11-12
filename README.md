@@ -41,8 +41,10 @@ On Ubuntu, Install the runtime packages and Python build tools:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin polkitd pkexec xfce-polkit
+sudo apt install python3 python3-venv python3-tk libcairo2 libxcursor1 xfconf libglib2.0-bin
 ```
+
+The app uses the system's existing Polkit `pkexec` and authentication agent; do not install another Polkit agent for XFCE Utility.
 
 From the project directory, run the installer as your normal desktop user:
 

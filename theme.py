@@ -1223,11 +1223,13 @@ def _apply_all_users_as_root(arguments: list[str]) -> int:
 def _apply_all_users_with_authentication(
     kind: str, theme: ThemeData | WindowData | IconData | CursorData | KdeThemeData
 ) -> None:
-    pkexec = shutil.which("pkexec")
+    from polkit import detect_polkit
+
+    pkexec = detect_polkit()
     if pkexec is None:
         raise RuntimeError(
-            "Polkit is unavailable. Install pkexec (provided by polkitd) and an "
-            "XFCE Polkit authentication agent."
+            "Polkit is unavailable. Ensure pkexec and a desktop authentication agent "
+            "are installed."
         )
 
     interpreter = _require_trusted_root_path(Path(sys.executable), "Python interpreter")

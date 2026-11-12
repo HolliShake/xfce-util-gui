@@ -36,6 +36,7 @@ py-modules = [
     "icon_theme_tab",
     "kde_theme_tab",
     "main",
+    "polkit",
     "scrollable_dropdown",
     "supported_display_manager",
     "theme",
