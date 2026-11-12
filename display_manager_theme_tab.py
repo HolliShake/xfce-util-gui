@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 import logging
-from tkinter import messagebox
+from pathlib import Path
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
@@ -250,8 +251,11 @@ class DisplayManagerThemeTab:
         values: Mapping[str, DisplayManagerSettingValue],
         config_error: str | None,
     ) -> None:
-        self._setting_entries: dict[str, ctk.CTkEntry | ctk.CTkComboBox] = {}
+        self._setting_entries: dict[
+            str, ctk.CTkEntry | ctk.CTkComboBox | ctk.CTkSwitch
+        ] = {}
         self._setting_initial: dict[str, str | None] = {}
+        self._setting_initial_switches: dict[str, bool] = {}
         card = ctk.CTkFrame(
             parent,
             fg_color=_SURFACE,
@@ -600,7 +604,32 @@ class DisplayManagerThemeTab:
 
         # Input field
         theme_kind = _THEME_SETTING_KINDS.get(setting.name)
-        if theme_kind is not None:
+        browse_background = setting.name == "background"
+        if setting.name == "user-background":
+            initial_enabled = (
+                parsed_value.value.strip().casefold() not in ("false", "0", "no", "off")
+                if parsed_value is not None
+                else True
+            )
+            value_entry = ctk.CTkSwitch(
+                row_frame,
+                text="Enabled",
+                font=self._f_body,
+                height=32,
+                state="disabled" if config_error else "normal",
+                fg_color=_BORDER_INPUT,
+                progress_color=_ACCENT,
+                button_color=_SURFACE,
+                button_hover_color=_ACCENT_HOVER,
+                text_color=_TEXT,
+                command=self._sync_save_state,
+            )
+            if initial_enabled:
+                value_entry.select()
+            else:
+                value_entry.deselect()
+            self._setting_initial_switches[setting.name] = initial_enabled
+        elif theme_kind is not None:
             choices = self._get_installed_theme_names(theme_kind)
             if choices is not None and parsed_value is not None:
                 choices = tuple(dict.fromkeys((parsed_value.value, *choices)))
@@ -647,9 +676,25 @@ class DisplayManagerThemeTab:
             if parsed_value is not None:
                 value_entry.insert(0, parsed_value.value)
 
-        if theme_kind is not None and self._installed_theme_names.get(theme_kind) is None:
+        value_entry.grid(row=3, column=0, sticky="ew", padx=(22, 0), pady=(0, 2))
+        if browse_background:
+            ctk.CTkButton(
+                row_frame,
+                text="Choose image…",
+                width=120,
+                height=28,
+                font=self._f_meta,
+                fg_color=_SURFACE_INPUT,
+                hover_color=_ACCENT_HOVER,
+                text_color=_TEXT,
+                border_width=1,
+                border_color=_BORDER_INPUT,
+                corner_radius=_RADIUS_INPUT,
+                state="disabled" if config_error else "normal",
+                command=lambda entry=value_entry: self._choose_background_file(entry),
+            ).grid(row=4, column=0, sticky="e", padx=(22, 0), pady=(0, 8))
+        elif theme_kind is not None and self._installed_theme_names.get(theme_kind) is None:
             # Show a small helper note under the input
-            value_entry.grid(row=3, column=0, sticky="ew", padx=(22, 0), pady=(0, 2))
             ctk.CTkLabel(
                 row_frame,
                 text="Installed theme choices are unavailable; enter a value manually.",
@@ -659,8 +704,8 @@ class DisplayManagerThemeTab:
                 justify="left",
                 wraplength=560,
             ).grid(row=4, column=0, sticky="ew", padx=(22, 0), pady=(0, 8))
-        else:
-            value_entry.grid(row=3, column=0, sticky="ew", padx=(22, 0), pady=(0, 8))
+        elif setting.name != "user-background":
+            value_entry.grid_configure(pady=(0, 8))
 
         self._setting_entries[setting.name] = value_entry
         self._setting_initial[setting.name] = (
@@ -678,6 +723,8 @@ class DisplayManagerThemeTab:
         try:
             if isinstance(widget, ctk.CTkComboBox):
                 widget.configure(command=lambda _value: self._sync_save_state())
+            elif isinstance(widget, ctk.CTkSwitch):
+                widget.configure(command=self._sync_save_state)
             else:
                 widget.bind("<KeyRelease>", lambda _e: self._sync_save_state(), add="+")
         except Exception:
@@ -686,12 +733,42 @@ class DisplayManagerThemeTab:
     def _current_updates(self) -> dict[str, str]:
         updates: dict[str, str] = {}
         for key, entry in self._setting_entries.items():
+            if isinstance(entry, ctk.CTkSwitch):
+                current_state = bool(entry.get())
+                if current_state != self._setting_initial_switches[key]:
+                    updates[key] = "true" if current_state else "false"
+                continue
             value = entry.get()
             if not isinstance(value, str):
                 continue
             if value != (self._setting_initial[key] or ""):
                 updates[key] = value
         return updates
+
+    def _choose_background_file(self, entry: ctk.CTkEntry) -> None:
+        initial_directory = Path.home()
+        current_value = entry.get().strip()
+        if current_value and not current_value.startswith("#"):
+            candidate = Path(current_value).expanduser()
+            if candidate.is_dir():
+                initial_directory = candidate.resolve()
+            elif candidate.is_absolute() or candidate.exists() or candidate.suffix:
+                if candidate.parent.is_dir():
+                    initial_directory = candidate.parent.resolve()
+        path = filedialog.askopenfilename(
+            parent=self._parent,
+            title="Choose greeter background image",
+            initialdir=str(initial_directory),
+            filetypes=(
+                ("Image files", "*.png *.jpg *.jpeg *.bmp *.webp *.gif"),
+                ("All files", "*.*"),
+            ),
+        )
+        if not path:
+            return
+        entry.delete(0, "end")
+        entry.insert(0, path)
+        self._sync_save_state()
 
     def _sync_save_state(self) -> None:
         if not hasattr(self, "_save_button"):
