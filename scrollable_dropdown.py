@@ -1,5 +1,6 @@
 import sys
 import tkinter
+import tkinter.font
 from typing import Any
 
 import customtkinter as ctk
@@ -66,9 +67,15 @@ def _rounded_points(
 class ScrollableComboBox(ctk.CTkComboBox):
     """A CustomTkinter combo box with a root-bounded, scrollable popup.
 
-    The popup is a rounded frame holding a lightweight canvas list, so rows
-    never poke out of the rounded corners, the scrollbar only appears when
-    needed, and the list stays fast with many values.
+    The popup is a rounded frame holding a lightweight canvas list:
+
+    * rows never poke out of the rounded corners,
+    * only the visible rows are drawn, so thousands of values stay fast,
+    * long values are truncated with an ellipsis instead of being clipped,
+    * the selected row gets an accent bar and a check mark,
+    * the scrollbar only appears when needed,
+    * keyboard: Up/Down/Home/End/PageUp/PageDown/Enter/Escape, plus
+      type-ahead (readonly state) to jump to a matching entry.
 
     NOTE: CTkComboBox owns attributes such as ``_canvas``, ``_entry``,
     ``_values`` and ``_state``. All popup-specific attributes below are
@@ -78,6 +85,9 @@ class ScrollableComboBox(ctk.CTkComboBox):
     _MAX_POPUP_HEIGHT = 320  # logical px (scaled for DPI automatically)
     _OPTION_HEIGHT = 32
     _MAX_CORNER_RADIUS = 12
+    _POPUP_GAP = 3  # logical px between the field and the popup
+    _ROW_RADIUS = 7
+    _TYPEAHEAD_RESET_MS = 700
 
     # Class-level defaults so methods are safe even if CTk calls configure()
     # or destroy() before our __init__ body has run.
@@ -86,7 +96,7 @@ class ScrollableComboBox(ctk.CTkComboBox):
     _popup_canvas: tkinter.Canvas | None = None
     _popup_scrollbar: Any = None
     _popup_key: str | None = None
-    _popup_dismiss_bindings: tuple = ()
+    _popup_dismiss_bindings: Any = ()
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         initial_values = [str(v) for v in (kwargs.get("values") or ())]
@@ -112,12 +122,26 @@ class ScrollableComboBox(ctk.CTkComboBox):
         self._popup_hover_item: int | None = None
         self._popup_selected_item: int | None = None
         self._popup_accent_item: int | None = None
+        self._popup_check_item: int | None = None
+        self._popup_text_items: dict[int, int] = {}
+        self._popup_fit_cache: dict[int, str] = {}
+        self._popup_font: tkinter.font.Font | None = None
+        self._popup_text_color = "#000000"
+        self._popup_text_x = 12
+        self._popup_text_reserve = 28
+        self._popup_typeahead = ""
+        self._popup_typeahead_job: str | None = None
 
         for sequence, handler in (
             ("<Down>", self._on_key_down),
             ("<Up>", self._on_key_up),
+            ("<Home>", self._on_key_home),
+            ("<End>", self._on_key_end),
+            ("<Prior>", self._on_key_page_up),
+            ("<Next>", self._on_key_page_down),
             ("<Return>", self._on_key_return),
             ("<Escape>", self._on_key_escape),
+            ("<Key>", self._on_key_typeahead),
         ):
             try:
                 self._entry.bind(sequence, handler, add="+")
@@ -178,6 +202,7 @@ class ScrollableComboBox(ctk.CTkComboBox):
 
         root = self.winfo_toplevel()
         root.update_idletasks()
+        gap = self._scaled(self._POPUP_GAP)
         x, y, width, height = _calculate_popup_geometry(
             (
                 root.winfo_rootx(),
@@ -188,9 +213,9 @@ class ScrollableComboBox(ctk.CTkComboBox):
             (root.winfo_screenwidth(), root.winfo_screenheight()),
             (
                 self.winfo_rootx(),
-                self.winfo_rooty(),
+                self.winfo_rooty() - gap,
                 self.winfo_width(),
-                self.winfo_height(),
+                self.winfo_height() + 2 * gap,
             ),
             desired,
         )
@@ -262,7 +287,7 @@ class ScrollableComboBox(ctk.CTkComboBox):
         canvas.grid(row=0, column=0, sticky="nsew")
 
         scrollbar = ctk.CTkScrollbar(container, width=10, command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.configure(yscrollcommand=self._on_yscroll)
 
         canvas.bind("<Motion>", self._on_motion)
         canvas.bind("<Leave>", self._on_leave)
@@ -313,7 +338,7 @@ class ScrollableComboBox(ctk.CTkComboBox):
             y1,
             max(inset + 1, self._popup_draw_width - inset),
             y2,
-            self._scaled(6),
+            self._scaled(self._ROW_RADIUS),
         )
 
     def _redraw(self) -> None:
@@ -321,6 +346,8 @@ class ScrollableComboBox(ctk.CTkComboBox):
         if canvas is None:
             return
         canvas.delete("all")
+        self._popup_text_items = {}
+        self._popup_fit_cache = {}
         row = self._popup_row_px
         self._popup_draw_width = max(1, canvas.winfo_width())
         canvas.configure(
@@ -328,9 +355,17 @@ class ScrollableComboBox(ctk.CTkComboBox):
         )
 
         font = self._apply_font_scaling(self.cget("dropdown_font"))
-        text_color = self._apply_appearance_mode(self.cget("dropdown_text_color"))
+        try:
+            self._popup_font = tkinter.font.Font(root=canvas, font=font)
+        except tkinter.TclError:
+            self._popup_font = None
+        self._popup_text_color = self._apply_appearance_mode(
+            self.cget("dropdown_text_color")
+        )
         hover_color = self._apply_appearance_mode(self.cget("dropdown_hover_color"))
         accent_color = self._apply_appearance_mode(self.cget("button_color"))
+        self._popup_text_x = max(10, self._scaled(14))
+        self._popup_text_reserve = max(20, self._scaled(30))
 
         dummy = _rounded_points(0, 0, 10, 10, 3)
         self._popup_selected_item = canvas.create_polygon(
@@ -342,33 +377,94 @@ class ScrollableComboBox(ctk.CTkComboBox):
         self._popup_accent_item = canvas.create_polygon(
             dummy, smooth=True, fill=accent_color, outline="", state="hidden"
         )
+        self._popup_check_item = canvas.create_line(
+            0, 0, 1, 1, fill=accent_color, width=max(2, self._scaled(2)),
+            capstyle="round", joinstyle="round", state="hidden",
+        )
 
-        text_x = max(8, self._scaled(12))
-        for i, value in enumerate(self._values):
-            canvas.create_text(
-                text_x,
-                i * row + row / 2,
-                text=value,
-                anchor="w",
-                font=font,
-                fill=text_color,
-            )
-
-        if self._popup_selected_index is not None:
-            canvas.coords(
-                self._popup_selected_item, *self._row_rect(self._popup_selected_index)
-            )
+        index = self._popup_selected_index
+        if index is not None:
+            canvas.coords(self._popup_selected_item, *self._row_rect(index))
             canvas.itemconfigure(self._popup_selected_item, state="normal")
-            bar_w = max(2, self._scaled(3))
-            top = self._popup_selected_index * row + row * 0.28
-            bottom = (self._popup_selected_index + 1) * row - row * 0.28
-            left = max(2, self._scaled(3)) + 1
+
+            bar_w = max(3, self._scaled(3))
+            top = index * row + row * 0.27
+            bottom = (index + 1) * row - row * 0.27
+            left = max(2, self._scaled(3)) + max(2, self._scaled(2))
             canvas.coords(
                 self._popup_accent_item,
                 *_rounded_points(left, top, left + bar_w, bottom, bar_w / 2),
             )
             canvas.itemconfigure(self._popup_accent_item, state="normal")
+
+            size = max(3, self._scaled(4))
+            cx = self._popup_draw_width - max(2, self._scaled(3)) - self._scaled(16)
+            cy = index * row + row / 2
+            canvas.coords(
+                self._popup_check_item,
+                cx - size, cy,
+                cx - size * 0.3, cy + size * 0.8,
+                cx + size, cy - size * 0.7,
+            )
+            canvas.itemconfigure(self._popup_check_item, state="normal")
+
         self._set_hover(self._popup_hover_index)
+        self._sync_rows()
+
+    def _fit_text(self, index: int) -> str:
+        cached = self._popup_fit_cache.get(index)
+        if cached is not None:
+            return cached
+        value = self._values[index]
+        font = self._popup_font
+        available = (
+            self._popup_draw_width - self._popup_text_x - self._popup_text_reserve
+        )
+        result = value
+        if font is not None and available > 0 and font.measure(value) > available:
+            ellipsis = "\u2026"
+            low, high = 0, len(value)
+            while low < high:  # longest prefix that still fits with the ellipsis
+                mid = (low + high + 1) // 2
+                if font.measure(value[:mid].rstrip() + ellipsis) <= available:
+                    low = mid
+                else:
+                    high = mid - 1
+            result = value[:low].rstrip() + ellipsis
+        self._popup_fit_cache[index] = result
+        return result
+
+    def _sync_rows(self) -> None:
+        """Draw only the rows in (or near) view; drop the ones that left."""
+        canvas = self._popup_canvas
+        if canvas is None or self._popup_row_px <= 0 or self._popup_font is None:
+            return
+        row = self._popup_row_px
+        count = len(self._values)
+        first = max(0, int(canvas.canvasy(0) // row) - 2)
+        last = min(count, int(canvas.canvasy(canvas.winfo_height()) // row) + 3)
+
+        for index in [i for i in self._popup_text_items if not first <= i < last]:
+            canvas.delete(self._popup_text_items.pop(index))
+
+        font = self._apply_font_scaling(self.cget("dropdown_font"))
+        for index in range(first, last):
+            if index in self._popup_text_items:
+                continue
+            self._popup_text_items[index] = canvas.create_text(
+                self._popup_text_x,
+                index * row + row / 2,
+                text=self._fit_text(index),
+                anchor="w",
+                font=font,
+                fill=self._popup_text_color,
+            )
+
+    def _on_yscroll(self, first: str, last: str) -> None:
+        scrollbar = self._popup_scrollbar
+        if scrollbar is not None:
+            scrollbar.set(first, last)
+        self._sync_rows()
 
     def _set_hover(self, index: int | None) -> None:
         canvas = self._popup_canvas
@@ -425,11 +521,26 @@ class ScrollableComboBox(ctk.CTkComboBox):
         canvas = self._popup_canvas
         if canvas is None:
             return "break"
-        if getattr(event, "num", None) == 4 or getattr(event, "delta", 0) > 0:
+        num = getattr(event, "num", None)
+        delta = getattr(event, "delta", 0)
+        if num == 4:
             step = -1
-        else:
+        elif num == 5:
             step = 1
+        elif delta:
+            # Windows reports multiples of 120, macOS small raw deltas.
+            step = -max(1, abs(delta) // 120) if delta > 0 else max(1, abs(delta) // 120)
+        else:
+            return "break"
         canvas.yview_scroll(step, "units")
+        # The row under a stationary pointer changes while scrolling.
+        try:
+            local_y = canvas.winfo_pointery() - canvas.winfo_rooty()
+            if 0 <= local_y < canvas.winfo_height():
+                index = int(canvas.canvasy(local_y) // self._popup_row_px)
+                self._set_hover(index if 0 <= index < len(self._values) else None)
+        except tkinter.TclError:
+            pass
         return "break"
 
     def _on_canvas_configure(self, event: Any) -> None:
@@ -450,6 +561,19 @@ class ScrollableComboBox(ctk.CTkComboBox):
         self._set_hover(new)
         self._ensure_visible(new)
 
+    def _jump_highlight(self, index: int) -> None:
+        if not self._values:
+            return
+        index = min(max(index, 0), len(self._values) - 1)
+        self._set_hover(index)
+        self._ensure_visible(index)
+
+    def _page_size(self) -> int:
+        canvas = self._popup_canvas
+        if canvas is None or self._popup_row_px <= 0:
+            return 1
+        return max(1, canvas.winfo_height() // self._popup_row_px - 1)
+
     def _on_key_down(self, _event: Any = None) -> str | None:
         if self._is_open():
             self._move_highlight(1)
@@ -462,6 +586,30 @@ class ScrollableComboBox(ctk.CTkComboBox):
     def _on_key_up(self, _event: Any = None) -> str | None:
         if self._is_open():
             self._move_highlight(-1)
+            return "break"
+        return None
+
+    def _on_key_home(self, _event: Any = None) -> str | None:
+        if self._is_open():
+            self._jump_highlight(0)
+            return "break"
+        return None
+
+    def _on_key_end(self, _event: Any = None) -> str | None:
+        if self._is_open():
+            self._jump_highlight(len(self._values) - 1)
+            return "break"
+        return None
+
+    def _on_key_page_up(self, _event: Any = None) -> str | None:
+        if self._is_open():
+            self._move_highlight(-self._page_size())
+            return "break"
+        return None
+
+    def _on_key_page_down(self, _event: Any = None) -> str | None:
+        if self._is_open():
+            self._move_highlight(self._page_size())
             return "break"
         return None
 
@@ -479,6 +627,51 @@ class ScrollableComboBox(ctk.CTkComboBox):
             self._close_popup()
             return "break"
         return None
+
+    def _on_key_typeahead(self, event: Any) -> str | None:
+        """Jump to the first value starting with the typed characters.
+
+        Only active while the popup is open and the field is not editable,
+        so normal typing in an editable combo box is never hijacked.
+        """
+        char = getattr(event, "char", "")
+        if not self._is_open() or not char or not char.isprintable():
+            return None
+        if self._state != "readonly":
+            return None
+
+        if self._popup_typeahead_job is not None:
+            try:
+                self.after_cancel(self._popup_typeahead_job)
+            except (tkinter.TclError, ValueError):
+                pass
+        self._popup_typeahead += char.lower()
+        self._popup_typeahead_job = self.after(
+            self._TYPEAHEAD_RESET_MS, self._reset_typeahead
+        )
+
+        count = len(self._values)
+        if not count:
+            return "break"
+        start = self._popup_hover_index
+        # A repeated single letter cycles through matches; otherwise search
+        # from the current row so the prefix keeps narrowing.
+        query = self._popup_typeahead
+        if len(set(query)) == 1 and len(query) > 1:
+            query = query[0]
+            begin = (start + 1) if start is not None else 0
+        else:
+            begin = start if (start is not None and len(query) > 1) else 0
+        for offset in range(count):
+            i = (begin + offset) % count
+            if self._values[i].lower().startswith(query):
+                self._jump_highlight(i)
+                break
+        return "break"
+
+    def _reset_typeahead(self) -> None:
+        self._popup_typeahead = ""
+        self._popup_typeahead_job = None
 
     # ------------------------------------------------------------ selecting
 
@@ -570,9 +763,16 @@ class ScrollableComboBox(ctk.CTkComboBox):
             except tkinter.TclError:
                 pass
         self._popup_hover_index = None
+        self._popup_typeahead = ""
         self._unbind_dismiss()
 
     def destroy(self) -> None:
+        if self._popup_typeahead_job is not None:
+            try:
+                self.after_cancel(self._popup_typeahead_job)
+            except (tkinter.TclError, ValueError):
+                pass
+            self._popup_typeahead_job = None
         try:
             self._close_popup()
         except tkinter.TclError:
