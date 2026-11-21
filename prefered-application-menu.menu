@@ -1,0 +1,53 @@
+<!DOCTYPE Menu PUBLIC "-//freedesktop//DTD Menu 1.0//EN"
+ "http://www.freedesktop.org/standards/menu-spec/menu-1.0.dtd">
+<Menu>
+  <Name>Apple</Name>
+  <DefaultAppDirs/>
+  <DefaultDirectoryDirs/>
+
+  <Include>
+    <Filename>catalina-about.desktop</Filename>
+    <Filename>catalina-sysprefs.desktop</Filename>
+    <Filename>catalina-appstore.desktop</Filename>
+    <Filename>catalina-forcequit.desktop</Filename>
+    <Filename>catalina-sleep.desktop</Filename>
+    <Filename>catalina-restart.desktop</Filename>
+    <Filename>catalina-shutdown.desktop</Filename>
+    <Filename>catalina-lock.desktop</Filename>
+    <Filename>catalina-logout.desktop</Filename>
+  </Include>
+
+  <!-- Categories shown directly in the dropdown -->
+  <Menu><Name>Accessories</Name><Directory>xfce-accessories.directory</Directory>
+    <Include><Category>Utility</Category></Include></Menu>
+  <Menu><Name>Development</Name><Directory>xfce-development.directory</Directory>
+    <Include><Category>Development</Category></Include></Menu>
+  <Menu><Name>Education</Name><Directory>xfce-education.directory</Directory>
+    <Include><Category>Education</Category></Include></Menu>
+  <Menu><Name>Games</Name><Directory>xfce-games.directory</Directory>
+    <Include><Category>Game</Category></Include></Menu>
+  <Menu><Name>Graphics</Name><Directory>xfce-graphics.directory</Directory>
+    <Include><Category>Graphics</Category></Include></Menu>
+  <Menu><Name>Internet</Name><Directory>xfce-network.directory</Directory>
+    <Include><Category>Network</Category></Include></Menu>
+  <Menu><Name>Multimedia</Name><Directory>xfce-multimedia.directory</Directory>
+    <Include><Category>AudioVideo</Category></Include></Menu>
+  <Menu><Name>Office</Name><Directory>xfce-office.directory</Directory>
+    <Include><Category>Office</Category></Include></Menu>
+  <Menu><Name>System</Name><Directory>xfce-system.directory</Directory>
+    <Include><Category>System</Category></Include></Menu>
+
+  <!-- No <Separator/> elements: no dividers in the menu -->
+  <Layout>
+    <Menuitem>catalina-about.desktop</Menuitem>
+    <Menuitem>catalina-sysprefs.desktop</Menuitem>
+    <Menuitem>catalina-appstore.desktop</Menuitem>
+    <Merge type="menus"/>
+    <Menuitem>catalina-forcequit.desktop</Menuitem>
+    <Menuitem>catalina-sleep.desktop</Menuitem>
+    <Menuitem>catalina-restart.desktop</Menuitem>
+    <Menuitem>catalina-shutdown.desktop</Menuitem>
+    <Menuitem>catalina-lock.desktop</Menuitem>
+    <Menuitem>catalina-logout.desktop</Menuitem>
+  </Layout>
+</Menu>

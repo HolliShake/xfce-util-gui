@@ -6,7 +6,13 @@ import customtkinter as ctk
 
 from scrollable_dropdown import ScrollableComboBox
 
-from theme import ThemeData, get_available_themes, get_gtk_theme_name, select_gtk_theme
+from theme import (
+    ThemeData,
+    _is_gnome_desktop,
+    get_available_themes,
+    get_gtk_theme_name,
+    select_gtk_theme,
+)
 
 # ── Design tokens ────────────────────────────────────────────────────────────
 # Every color is a (light, dark) tuple so the tab follows the appearance mode.
@@ -34,8 +40,12 @@ _PAD = 20
 _CARD_RADIUS = 14
 
 _TOOLKITS = (("GTK2", "gtk2"), ("GTK3", "gtk3"), ("GTK4", "gtk4"))
-_EXTRAS = (("XFWM4", "xfwm4"), ("libAdwaita", "libAdwaita"))
-_EXTRA_LABEL = {"XFWM4": "XFWM4", "libAdwaita": "libAdwaita CSS"}
+_EXTRAS = (("GNOME Shell", "gnomeShell"), ("XFWM4", "xfwm4"), ("libAdwaita", "libAdwaita"))
+_EXTRA_LABEL = {
+    "GNOME Shell": "GNOME Shell",
+    "XFWM4": "XFWM4",
+    "libAdwaita": "libAdwaita CSS",
+}
 
 
 class GtkThemeTab:
@@ -366,6 +376,21 @@ class GtkThemeTab:
         self._update_apply_state()
 
     def _refresh_hint(self) -> None:
+        theme = self._selected_theme()
+        shell_only = bool(
+            theme
+            and theme.gnomeShell
+            and not (theme.gtk2 or theme.gtk3 or theme.gtk4)
+        )
+        self._all_users_switch.configure(state="disabled" if shell_only else "normal")
+        if shell_only:
+            if self._all_users.get():
+                self._all_users.set(False)
+            self._hint.configure(
+                text="GNOME Shell themes apply only to your current GNOME session.",
+                text_color=_MUTED,
+            )
+            return
         if self._all_users.get():
             self._hint.configure(
                 text="⚠  Overrides will be written to every home under /home. Existing files "
@@ -462,8 +487,13 @@ class GtkThemeTab:
             self._update_apply_state()
             return
 
+        is_gnome = _is_gnome_desktop()
         usable = sorted(
-            (t for t in themes if t.gtk2 or t.gtk3 or t.gtk4), key=lambda t: t.name.lower()
+            (
+                t for t in themes
+                if t.gtk2 or t.gtk3 or t.gtk4 or (is_gnome and t.gnomeShell)
+            ),
+            key=lambda t: t.name.lower(),
         )
         counts = Counter(t.name for t in usable)
 
@@ -499,6 +529,7 @@ class GtkThemeTab:
         theme = self._themes[label]
         self._update_strip(theme)
         self._render_details(theme)
+        self._refresh_hint()
         self._update_apply_state()
 
     # ───────────────────────────────────────────────────────────────── apply

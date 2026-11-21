@@ -27,7 +27,19 @@ class ThemeError(Exception):
 
 class ThemeData:
     """Class to hold theme metadata."""
-    def __init__(self, name: str, absolute_path: str, gtk2: bool, gtk3: bool, gtk4: bool, xfwm4: bool, icon: str|None, cursor: str|None, libAdwaita: bool = False):
+    def __init__(
+        self,
+        name: str,
+        absolute_path: str,
+        gtk2: bool,
+        gtk3: bool,
+        gtk4: bool,
+        xfwm4: bool,
+        icon: str | None,
+        cursor: str | None,
+        libAdwaita: bool = False,
+        gnomeShell: bool = False,
+    ):
         self.name = name
         self.absolute_path = absolute_path
         self.gtk2 = gtk2
@@ -35,6 +47,7 @@ class ThemeData:
         self.gtk4 = gtk4
         self.xfwm4 = xfwm4
         self.libAdwaita = libAdwaita
+        self.gnomeShell = gnomeShell
         self.icon = icon
         self.cursor = cursor
 
@@ -45,6 +58,7 @@ class ThemeData:
             f"  GTK 2: {'Yes' if self.gtk2 else 'No'}\n"
             f"  GTK 3: {'Yes' if self.gtk3 else 'No'}\n"
             f"  GTK 4: {'Yes' if self.gtk4 else 'No'}\n"
+            f"  GNOME Shell: {'Yes' if self.gnomeShell else 'No'}\n"
             f"  XFWM4: {'Yes' if self.xfwm4 else 'No'}\n"
             f"  libAdwaita override CSS: {'Available' if self.libAdwaita else 'Not available'}\n"
             f"  Icon theme: {self.icon if self.icon is not None else 'Not specified'}\n"
@@ -126,6 +140,15 @@ class KdeThemeData:
 
 _GNOME_IFACE = "org.gnome.desktop.interface"
 _GNOME_WM = "org.gnome.desktop.wm.preferences"
+_GNOME_SHELL_USER_THEME = "org.gnome.shell.extensions.user-theme"
+
+
+def _is_gnome_desktop() -> bool:
+    desktop = os.environ.get("XDG_CURRENT_DESKTOP") or os.environ.get("DESKTOP_SESSION", "")
+    return any(
+        name == "gnome" or name.startswith("gnome-")
+        for name in (part.strip().casefold() for part in desktop.split(":"))
+    )
 
 
 def _validate_name(name: str, kind: str) -> None:
@@ -361,8 +384,9 @@ def get_available_themes() -> list[ThemeData]:
                 gtk2 = (entry / "gtk-2.0" / "gtkrc").is_file()
                 gtk3 = (entry / "gtk-3.0" / "gtk.css").is_file()
                 gtk4 = (entry / "gtk-4.0" / "gtk.css").is_file()
+                gnome_shell = (entry / "gnome-shell" / "gnome-shell.css").is_file()
                 xfwm4 = (entry / "xfwm4" / "themerc").is_file()
-                if not any((gtk2, gtk3, gtk4, xfwm4)):
+                if not any((gtk2, gtk3, gtk4, gnome_shell, xfwm4)):
                     continue
                 try:
                     metadata = _read_index(entry)
@@ -375,6 +399,7 @@ def get_available_themes() -> list[ThemeData]:
                     gtk3=gtk3,
                     gtk4=gtk4,
                     xfwm4=xfwm4,
+                    gnomeShell=gnome_shell,
                     libAdwaita=gtk4,
                     icon=metadata.get("X-GNOME-Metatheme", "IconTheme", fallback=None) if metadata else None,
                     cursor=metadata.get("X-GNOME-Metatheme", "CursorTheme", fallback=None) if metadata else None,
@@ -1273,8 +1298,9 @@ def select_gtk_theme(theme: ThemeData, applyToAllUser: bool = False) -> None:
     """Set GTK and installed related themes in XFCE and GNOME (gsettings) settings.
 
     Every setting is written to xfconf and, when available, to gsettings.
-    A failure can leave earlier settings changed. Missing icon or cursor
-    themes referenced by metadata are skipped with a warning.
+    GNOME Shell themes are also selected in GNOME sessions when the User Themes
+    extension schema is available. A failure can leave earlier settings changed.
+    Missing icon or cursor themes referenced by metadata are skipped with a warning.
     All-user mode installs GTK overrides under directories in /home, backing
     up conflicts. Theme files must be accessible to each user; session
     settings still apply only to the current session.
@@ -1282,41 +1308,59 @@ def select_gtk_theme(theme: ThemeData, applyToAllUser: bool = False) -> None:
     if not isinstance(theme, ThemeData):
         raise TypeError("theme must be an instance of ThemeData")
     _validate_name(theme.name, "GTK")
-    if applyToAllUser:
+    has_gtk = theme.gtk2 or theme.gtk3 or theme.gtk4
+    shell_only = theme.gnomeShell and not has_gtk
+    is_gnome = _is_gnome_desktop()
+    if shell_only and not is_gnome:
+        raise RuntimeError("GNOME Shell-only themes can only be applied in a GNOME desktop session.")
+    if applyToAllUser and not shell_only:
         _apply_all_users_with_authentication("gtk", theme)
 
-    _set_related_theme("GTK", theme.name, "xsettings", "/Net/ThemeName",
-                       _GNOME_IFACE, "gtk-theme")
+    if not shell_only:
+        _set_related_theme("GTK", theme.name, "xsettings", "/Net/ThemeName",
+                           _GNOME_IFACE, "gtk-theme")
 
-    if theme.xfwm4:
-        _set_related_theme("window", theme.name, "xfwm4", "/general/theme",
-                           _GNOME_WM, "theme")
+        if theme.xfwm4:
+            _set_related_theme("window", theme.name, "xfwm4", "/general/theme",
+                               _GNOME_WM, "theme")
 
-    icon_roots = _icon_theme_roots()
-    cursor_roots = _cursor_theme_roots()
-    for kind, name, property_name, key in (
-        ("icon", theme.icon, "/Net/IconThemeName", "icon-theme"),
-        ("cursor", theme.cursor, "/Gtk/CursorThemeName", "cursor-theme"),
-    ):
-        if not name:
-            continue
+        icon_roots = _icon_theme_roots()
+        cursor_roots = _cursor_theme_roots()
+        for kind, name, property_name, key in (
+            ("icon", theme.icon, "/Net/IconThemeName", "icon-theme"),
+            ("cursor", theme.cursor, "/Gtk/CursorThemeName", "cursor-theme"),
+        ):
+            if not name:
+                continue
+            try:
+                _validate_name(name, kind)
+            except ValueError as e:
+                raise ValueError(f"{e}; earlier settings may already have changed") from e
+            try:
+                available = (
+                    _icon_theme_installed(name, icon_roots)
+                    if kind == "icon" else _cursor_theme_available(name, cursor_roots, set())
+                )
+            except (OSError, UnicodeError, configparser.Error) as e:
+                raise RuntimeError(
+                    f"Failed to check {kind} theme '{name}'; earlier settings may already have changed: {e}"
+                ) from e
+            if not available:
+                warnings.warn(f"{kind.capitalize()} theme '{name}' is not installed; skipping it", stacklevel=2)
+                continue
+            _set_related_theme(kind, name, "xsettings", property_name, _GNOME_IFACE, key)
+
+    if theme.gnomeShell and is_gnome:
         try:
-            _validate_name(name, kind)
-        except ValueError as e:
-            raise ValueError(f"{e}; earlier settings may already have changed") from e
-        try:
-            available = (
-                _icon_theme_installed(name, icon_roots)
-                if kind == "icon" else _cursor_theme_available(name, cursor_roots, set())
-            )
-        except (OSError, UnicodeError, configparser.Error) as e:
+            available = _gsettings_set(_GNOME_SHELL_USER_THEME, "name", theme.name)
+        except (OSError, subprocess.CalledProcessError) as error:
             raise RuntimeError(
-                f"Failed to check {kind} theme '{name}'; earlier settings may already have changed: {e}"
-            ) from e
+                f"Failed to set GNOME Shell theme '{theme.name}': {_describe(error)}"
+            ) from error
         if not available:
-            warnings.warn(f"{kind.capitalize()} theme '{name}' is not installed; skipping it", stacklevel=2)
-            continue
-        _set_related_theme(kind, name, "xsettings", property_name, _GNOME_IFACE, key)
+            raise RuntimeError(
+                "Could not set the GNOME Shell theme. Install and enable the GNOME User Themes extension."
+            )
 
 
 def select_window_theme(theme: WindowData, applyToAllUser: bool = False) -> None:
