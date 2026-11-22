@@ -41,4 +41,9 @@ sudo install -Dm755 "$project_dir/xfce-util-launcher" /usr/local/bin/xfce-util
 sudo install -Dm644 "$project_dir/xfce-util.desktop" \
     /usr/local/share/applications/xfce-util.desktop
 
+if command -v xfce4-panel >/dev/null 2>&1 &&
+    ps -u "$(id -u)" -o comm= | grep -Fxq xfce4-panel; then
+    xfce4-panel --restart
+fi
+
 printf 'Installed XFCE Utility. Launch it from the applications menu or run: xfce-util\n'

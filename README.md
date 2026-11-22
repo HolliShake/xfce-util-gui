@@ -36,7 +36,7 @@ KDE theme application requires KDE Plasma's `lookandfeeltool` (typically provide
 
 ## Build and system-wide installation
 
-The installer builds a wheel in a project-local virtual environment, installs it in a dedicated root-owned environment under `/opt/xfceutil`, removes group/other write permissions from that environment, and registers a system launcher and XFCE Utility icon. The app itself runs as your desktop user; Polkit authentication is requested for display-manager saves and all-user changes.
+The installer builds a wheel in a project-local virtual environment, installs it in a dedicated root-owned environment under `/opt/xfceutil`, removes group/other write permissions from that environment, and registers a system launcher and XFCE Utility icon in the System applications category. If an XFCE panel is running for the installing user, the installer restarts it to refresh the applications menu. The app itself runs as your desktop user; Polkit authentication is requested for display-manager saves and all-user changes.
 
 Install the system packages for your distribution before running the installer. Package names below are for common releases and may vary by version:
 

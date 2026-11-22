@@ -5,6 +5,6 @@ Comment=Browse and apply desktop themes; authenticate only for all-user changes
 Exec=xfce-util
 Icon=/usr/local/share/pixmaps/xfce-util.png
 Terminal=false
-Categories=Settings;DesktopSettings;
+Categories=System;DesktopSettings;
 StartupNotify=false
 StartupWMClass=Xfceutil
